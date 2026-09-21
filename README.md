@@ -1,5 +1,11 @@
 # Omarchy Workspace Gallery
 
+<video src="assets/workspace-gallery-demo.mp4" poster="assets/workspace-gallery-demo.jpg" controls muted playsinline width="100%">
+  <a href="assets/workspace-gallery-demo.mp4">Watch the workspace gallery demo</a>
+</video>
+
+[View the original post on X](https://x.com/manateelazycat/status/2101998832498438229)
+
 A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.
 
 ## Interaction
