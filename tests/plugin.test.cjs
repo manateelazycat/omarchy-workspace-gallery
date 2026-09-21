@@ -38,6 +38,16 @@ test("vertical and horizontal three-finger gestures are live and distance-aware"
   assert.match(gallery, /verticalSwipeDistance >= 90/);
 });
 
+test("Super+A toggles the gallery and arrow keys select workspaces", () => {
+  const config = read("scripts/gesture_config.py");
+  assert.match(config, /hl\.bind\("SUPER \+ A", hl\.dsp\.global\("quickshell:workspaceGalleryToggle"\)/);
+
+  const gallery = read("Gallery.qml");
+  assert.match(gallery, /name: "workspaceGalleryToggle"[\s\S]*onPressed: galleryScope\.toggle\(\)/);
+  assert.match(gallery, /event\.key === Qt\.Key_Left[\s\S]*galleryScope\.selectRelative\(-1\)/);
+  assert.match(gallery, /event\.key === Qt\.Key_Right[\s\S]*galleryScope\.selectRelative\(1\)/);
+});
+
 test("bottom gallery uses a follow-finger workspace track", () => {
   const source = read("GalleryWidget.qml");
   assert.match(source, /property real swipeOffset/);

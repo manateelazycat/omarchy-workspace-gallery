@@ -11,6 +11,9 @@ START = "-- >>> omarchy-workspace-gallery >>>"
 END = "-- <<< omarchy-workspace-gallery <<<"
 BLOCK = f'''{START}
 -- Managed by Workspace Gallery. Use scripts/gestures uninstall to remove.
+hl.bind("SUPER + A", hl.dsp.global("quickshell:workspaceGalleryToggle"), {{
+  description = "Toggle Workspace Gallery",
+}})
 hl.gesture({{
   fingers = 3,
   direction = "vertical",

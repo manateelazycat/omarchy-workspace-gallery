@@ -11,6 +11,7 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 
 ## Interaction
 
+- Press `Super+A` to open or close the gallery.
 - Make a deliberate three-finger swipe up and release to open the gallery;
   short swipes are ignored to prevent accidental activation.
 - Swipe three fingers down to close it.
@@ -21,8 +22,9 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 - The bottom 80% shows the selected workspace at a larger scale.
 - Drag a window between the top thumbnails and the large preview to move it.
 - Click a top workspace to select it; click a window in the large preview to focus it and leave the gallery.
-- Press `Esc` to focus the selected workspace and close the gallery. Arrow
-  keys and `H`/`L` select workspaces.
+- While the gallery is open, press the left and right arrow keys or `H`/`L`
+  to select workspaces. Press `Enter`, `Space`, or `Esc` to focus the selected
+  workspace and close the gallery.
 
 Outside the gallery, three-finger horizontal swipes continue switching Hyprland workspaces.
 
@@ -33,11 +35,13 @@ omarchy plugin add https://github.com/manateelazycat/omarchy-workspace-gallery.g
 ~/.config/omarchy/plugins/io.github.manateelazycat.workspace-gallery/scripts/gestures install
 ```
 
-The gesture installer adds a clearly marked block to `~/.config/hypr/input.lua`, creates a timestamped backup, reloads Hyprland, and validates the configuration.
+The gesture installer adds the `Super+A` shortcut and gestures in a clearly
+marked block in `~/.config/hypr/input.lua`, creates a timestamped backup,
+reloads Hyprland, and validates the configuration.
 
 ## Remove
 
-Remove the managed gesture block before removing the plugin:
+Remove the managed shortcut and gesture block before removing the plugin:
 
 ```bash
 ~/.config/omarchy/plugins/io.github.manateelazycat.workspace-gallery/scripts/gestures uninstall

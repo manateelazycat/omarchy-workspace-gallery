@@ -231,6 +231,12 @@ Scope {
     }
 
     GlobalShortcut {
+        name: "workspaceGalleryToggle"
+        description: "Toggle Workspace Gallery"
+        onPressed: galleryScope.toggle()
+    }
+
+    GlobalShortcut {
         name: "workspaceGalleryOpen"
         description: "Open Workspace Gallery"
         onPressed: galleryScope.open({})
