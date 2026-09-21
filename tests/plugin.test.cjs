@@ -83,6 +83,8 @@ test("drop coordinates are mapped into the real workspace before tiled insertion
   assert.match(dragBridge, /workX,\s+workY,\s+workW,\s+workH/);
   assert.match(navigation, /hl\.dsp\.cursor\.move\(\{ x = \$\{dropX\}, y = \$\{dropY\} \}\)/);
   assert.match(navigation, /special:workspace-gallery-staging/);
+  assert.match(navigation, /hl\.timer\(function\(\)/);
+  assert.match(navigation, /timeout = 16, type = "oneshot"/);
   assert.match(navigation, /x = \$\{restoreX\}, y = \$\{restoreY\}/);
 });
 

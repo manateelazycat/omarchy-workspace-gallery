@@ -216,11 +216,19 @@ Singleton {
         const dropY = Math.round(placement.dropY);
         const restoreX = Math.round(placement.restoreX);
         const restoreY = Math.round(placement.restoreY);
-        const detach = targetWorkspace === currentWorkspaceId
-            ? `hl.dispatch(hl.dsp.window.move({ workspace = "special:workspace-gallery-staging", follow = false, window = "address:${windowAddress}" }))`
-            : "";
+        if (targetWorkspace === currentWorkspaceId) {
+            Hyprland.dispatch(`function()
+                hl.dispatch(hl.dsp.window.move({ workspace = "special:workspace-gallery-staging", follow = false, window = "address:${windowAddress}" }))
+                hl.timer(function()
+                    hl.dispatch(hl.dsp.cursor.move({ x = ${dropX}, y = ${dropY} }))
+                    ${move}
+                    hl.dispatch(hl.dsp.cursor.move({ x = ${restoreX}, y = ${restoreY} }))
+                end, { timeout = 16, type = "oneshot" })
+            end`);
+            return true;
+        }
+
         Hyprland.dispatch(`function()
-            ${detach}
             hl.dispatch(hl.dsp.cursor.move({ x = ${dropX}, y = ${dropY} }))
             ${move}
             hl.dispatch(hl.dsp.cursor.move({ x = ${restoreX}, y = ${restoreY} }))
