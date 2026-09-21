@@ -21,18 +21,20 @@ Singleton {
 
     property real sourceWidth: 0
     property real sourceHeight: 0
+    property bool compactPreview: false
     property var previewGrab: null
     readonly property string previewUrl: root.previewGrab
         ? String(root.previewGrab.url ?? "")
         : ""
 
-    function begin(address, workspaceId, monitorName, w, h, px, py) {
+    function begin(address, workspaceId, monitorName, w, h, px, py, compact) {
         root.generation += 1;
         root.windowAddress = String(address ?? "");
         root.sourceWorkspaceId = workspaceId ?? -1;
         root.sourceMonitorName = String(monitorName ?? "");
         root.sourceWidth = w ?? 0;
         root.sourceHeight = h ?? 0;
+        root.compactPreview = compact === true;
         root.previewGrab = null;
         root.pointerX = px ?? 0;
         root.pointerY = py ?? 0;
@@ -89,6 +91,7 @@ Singleton {
         root.windowAddress = "";
         root.sourceWorkspaceId = -1;
         root.sourceMonitorName = "";
+        root.compactPreview = false;
         root.generation += 1;
         root.previewGrab = null;
         root.targets = ({});

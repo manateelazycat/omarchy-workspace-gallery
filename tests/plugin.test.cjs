@@ -57,6 +57,17 @@ test("workspace labels are hidden and swipe target drives the top highlight", ()
   assert.match(gallery, /z: 100/);
 });
 
+test("windows dragged from the large preview use a one-third-size proxy", () => {
+  const window = read("GalleryWindow.qml");
+  const widget = read("GalleryWidget.qml");
+  const bridge = read("CrossMonitorDrag.qml");
+  assert.match(window, /root\.Drag\.active && root\.closeOnActivate/);
+  assert.match(window, /root\.closeOnActivate\);/);
+  assert.match(bridge, /property bool compactPreview: false/);
+  assert.match(widget, /CrossMonitorDrag\.sourceWidth \/ 3/);
+  assert.match(widget, /CrossMonitorDrag\.sourceHeight \/ 3/);
+});
+
 test("high-frequency swipe events do not refresh the workspace data model", () => {
   assert.match(read("HyprlandData.qml"), /"custom"\]\.includes\(event\.name\)/);
 });

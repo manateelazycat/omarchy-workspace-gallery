@@ -408,8 +408,12 @@ Item {
         visible: CrossMonitorDrag.active
         x: CrossMonitorDrag.pointerX - root.monitorOriginX - width / 2
         y: CrossMonitorDrag.pointerY - root.monitorOriginY - height / 2
-        width: Math.max(110, CrossMonitorDrag.sourceWidth)
-        height: Math.max(72, CrossMonitorDrag.sourceHeight)
+        width: CrossMonitorDrag.compactPreview
+            ? Math.max(1, CrossMonitorDrag.sourceWidth / 3)
+            : Math.max(110, CrossMonitorDrag.sourceWidth)
+        height: CrossMonitorDrag.compactPreview
+            ? Math.max(1, CrossMonitorDrag.sourceHeight / 3)
+            : Math.max(72, CrossMonitorDrag.sourceHeight)
         z: 20000
         radius: 8
         color: Appearance.colors.colSurfaceContainerLow
