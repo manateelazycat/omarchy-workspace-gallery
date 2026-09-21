@@ -1,8 +1,6 @@
 # Omarchy Workspace Gallery
 
-<video src="https://github.com/manateelazycat/omarchy-workspace-gallery/raw/refs/heads/main/assets/workspace-gallery-demo.mp4" poster="assets/workspace-gallery-demo.jpg" controls muted playsinline preload="metadata" width="100%">
-  Your browser does not support MP4 video playback.
-</video>
+https://github.com/user-attachments/assets/f2a784c9-a5dc-433e-afa6-f3d038c70133
 
 A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.
 
