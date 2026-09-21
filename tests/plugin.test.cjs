@@ -48,6 +48,50 @@ test("Super+A toggles the gallery and arrow keys select workspaces", () => {
   assert.match(gallery, /event\.key === Qt\.Key_Right[\s\S]*galleryScope\.selectRelative\(1\)/);
 });
 
+test("Down and a four-finger pinch compact occupied workspaces", () => {
+  const gestures = read("scripts/gesture_config.py");
+  const gallery = read("Gallery.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+
+  assert.match(gestures, /fingers = 4,[\s\S]*direction = "pinchin"/);
+  assert.match(gestures, /workspace-gallery-compact,trigger/);
+  assert.match(gallery, /channel === "workspace-gallery-compact"[\s\S]*WorkspaceNavigation\.compactWorkspaces\(\)/);
+  assert.match(gallery, /event\.key === Qt\.Key_Down[\s\S]*WorkspaceNavigation\.compactWorkspaces\(\)/);
+  assert.match(navigation, /function compactWorkspaces\(\)/);
+  assert.match(navigation, /command: \["hyprctl", "clients", "-j"\]/);
+  assert.match(navigation, /command: \["hyprctl", "monitors", "-j"\]/);
+  assert.match(navigation, /function executeWorkspaceCompaction\(clients, monitors\)/);
+  assert.match(navigation, /hl\.dsp\.window\.move/);
+});
+
+test("workspace compaction preserves order and removes every numeric gap", () => {
+  const compact = require(path.join(root, "WorkspaceCompact.js"));
+  const clients = [1, 4, 4, 7, 9].map((workspace, index) => ({
+    address: `0x${index + 1}`,
+    mapped: true,
+    workspace: { id: workspace },
+    monitor: workspace === 7 ? 1 : 0
+  }));
+  const workspaces = [
+    { id: 1, monitor: "eDP-1" },
+    { id: 4, monitor: "eDP-1" },
+    { id: 7, monitor: "HDMI-A-1" },
+    { id: 9, monitor: "eDP-1" }
+  ];
+  const plan = compact.buildPlan(clients, workspaces, [
+    { id: 0, name: "eDP-1" },
+    { id: 1, name: "HDMI-A-1" }
+  ]);
+
+  assert.deepEqual(plan.mapping, { 1: 1, 4: 2, 7: 3, 9: 4 });
+  assert.deepEqual(plan.moves.map(move => [move.sourceId, move.targetId]), [
+    [4, 2], [7, 3], [9, 4]
+  ]);
+  assert.equal(plan.moves[1].monitorName, "HDMI-A-1");
+  assert.deepEqual(plan.moves[0].addresses, ["0x2", "0x3"]);
+  assert.deepEqual(compact.remapIds([9, 4, 1, 4], plan.mapping), [4, 2, 1]);
+});
+
 test("bottom gallery uses a follow-finger workspace track", () => {
   const source = read("GalleryWidget.qml");
   assert.match(source, /property real swipeOffset/);

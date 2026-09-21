@@ -4,13 +4,59 @@ import "."
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Hyprland
+import "WorkspaceCompact.js" as WorkspaceCompact
 import "WorkspaceSwitchOrder.js" as WorkspaceSwitchOrder
 
 Singleton {
     id: root
 
     property int pendingDragRefreshes: 0
+    property bool compactingWorkspaces: false
+    property var compactClientsSnapshot: []
+
+    Timer {
+        id: compactGuardTimer
+        interval: 800
+        repeat: false
+        onTriggered: root.compactingWorkspaces = false
+    }
+
+    Process {
+        id: compactClientsProcess
+        command: ["hyprctl", "clients", "-j"]
+        stdout: StdioCollector {
+            id: compactClientsCollector
+            onStreamFinished: {
+                try {
+                    root.compactClientsSnapshot = JSON.parse(compactClientsCollector.text || "[]");
+                    compactMonitorsProcess.running = true;
+                } catch (error) {
+                    console.warn("[WorkspaceGallery] Failed to read clients for compaction:", error);
+                    root.compactingWorkspaces = false;
+                }
+            }
+        }
+    }
+
+    Process {
+        id: compactMonitorsProcess
+        command: ["hyprctl", "monitors", "-j"]
+        stdout: StdioCollector {
+            id: compactMonitorsCollector
+            onStreamFinished: {
+                try {
+                    root.executeWorkspaceCompaction(
+                        root.compactClientsSnapshot,
+                        JSON.parse(compactMonitorsCollector.text || "[]"));
+                } catch (error) {
+                    console.warn("[WorkspaceGallery] Failed to read monitors for compaction:", error);
+                    root.compactingWorkspaces = false;
+                }
+            }
+        }
+    }
 
     Timer {
         id: refreshAfterDragTimer
@@ -176,6 +222,81 @@ Singleton {
 
         if (GlobalStates.overviewFocusedWorkspaceId > 0)
             root.dispatchFocusWorkspace(GlobalStates.overviewFocusedWorkspaceId);
+    }
+
+    function luaQuoted(value) {
+        return `"${String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+    }
+
+    function remapWorkspaceId(workspaceId, mapping) {
+        const id = Number(workspaceId);
+        return Number(mapping?.[id] ?? id);
+    }
+
+    function compactWorkspaces() {
+        if (root.compactingWorkspaces)
+            return false;
+
+        root.compactingWorkspaces = true;
+        compactGuardTimer.restart();
+        compactClientsProcess.running = true;
+        return true;
+    }
+
+    function executeWorkspaceCompaction(clients, monitors) {
+        const plan = WorkspaceCompact.buildPlan(
+            clients, [], monitors);
+        if (plan.moves.length === 0) {
+            root.compactingWorkspaces = false;
+            return false;
+        }
+
+        const pendingWindows = Object.assign({},
+            GlobalStates.overviewPendingWindowWorkspaceByAddress ?? {});
+        const pendingMonitors = {};
+        const pendingOccupied = [];
+        const suppressed = (GlobalStates.overviewSuppressedEmptyWorkspaceIds ?? []).slice();
+        const commands = [];
+
+        for (const move of plan.moves) {
+            for (const address of move.addresses) {
+                const normalized = ServiceManager.workspace.normalizeAddress(address);
+                if (normalized.length === 0)
+                    continue;
+                pendingWindows[normalized] = move.targetId;
+                commands.push(`hl.dispatch(hl.dsp.window.move({ workspace = ${move.targetId}, follow = false, window = ${root.luaQuoted(`address:${normalized}`)} }))`);
+            }
+            if (move.monitorName.length > 0) {
+                pendingMonitors[move.targetId] = move.monitorName;
+                commands.push(`hl.dispatch(hl.dsp.workspace.move({ workspace = "${move.targetId}", monitor = ${root.luaQuoted(move.monitorName)} }))`);
+            }
+            pendingOccupied.push({
+                id: move.targetId,
+                monitorName: move.monitorName,
+                sourceWorkspaceId: move.sourceId
+            });
+            if (!suppressed.includes(move.sourceId))
+                suppressed.push(move.sourceId);
+        }
+
+        GlobalStates.overviewPendingWindowWorkspaceByAddress = pendingWindows;
+        GlobalStates.overviewPendingWorkspaceMonitorById = pendingMonitors;
+        GlobalStates.overviewPendingOccupiedWorkspaces = pendingOccupied;
+        GlobalStates.overviewSuppressedEmptyWorkspaceIds = suppressed;
+        GlobalStates.overviewFocusedWorkspaceId = root.remapWorkspaceId(
+            GlobalStates.overviewFocusedWorkspaceId, plan.mapping);
+        GlobalStates.overviewCurrentWorkspaceId = root.remapWorkspaceId(
+            GlobalStates.overviewCurrentWorkspaceId, plan.mapping);
+        GlobalStates.overviewPreviousWorkspaceId = root.remapWorkspaceId(
+            GlobalStates.overviewPreviousWorkspaceId, plan.mapping);
+        GlobalStates.overviewWorkspaceMru = WorkspaceCompact.remapIds(
+            GlobalStates.overviewWorkspaceMru, plan.mapping);
+
+        Hyprland.dispatch(`function()\n${commands.map(command => `            ${command}`).join("\n")}\n        end`);
+        GlobalStates.refreshOverviewModel();
+        root.pendingDragRefreshes = 6;
+        refreshAfterDragTimer.restart();
+        return true;
     }
 
     function resetOverviewDragState() {

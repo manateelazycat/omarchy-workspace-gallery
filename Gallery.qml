@@ -57,6 +57,11 @@ Scope {
 
         const channel = parts[0];
         const phase = parts[1];
+        if (channel === "workspace-gallery-compact") {
+            if (phase === "trigger" && GlobalStates.overviewOpen)
+                WorkspaceNavigation.compactWorkspaces();
+            return;
+        }
         if (channel === "workspace-gallery-vertical") {
             if (phase === "start") {
                 galleryScope.verticalSwipeDistance = Number(parts[2] ?? 0);
@@ -219,6 +224,10 @@ Scope {
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Right || event.key === Qt.Key_L) {
                             galleryScope.selectRelative(1);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Down) {
+                            if (!event.isAutoRepeat)
+                                WorkspaceNavigation.compactWorkspaces();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
                             galleryScope.activateSelection();
