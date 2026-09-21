@@ -4,7 +4,8 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 
 ## Interaction
 
-- Swipe three fingers up to open the gallery.
+- Make a deliberate three-finger swipe up and release to open the gallery;
+  short swipes are ignored to prevent accidental activation.
 - Swipe three fingers down to close it.
 - Swipe three fingers left or right while open to move continuously between
   workspaces; releasing commits the switch or springs back based on distance

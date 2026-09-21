@@ -58,28 +58,6 @@ Rectangle {
         }
     }
 
-    Rectangle {
-        anchors.left: parent.left
-        anchors.top: parent.top
-        anchors.margins: 14
-        width: pageLabel.implicitWidth + 18
-        height: pageLabel.implicitHeight + 10
-        radius: height / 2
-        color: ColorUtils.transparentize(TuiStyle.bg, 0.16)
-        z: 80
-
-        StyledText {
-            id: pageLabel
-            anchors.centerIn: parent
-            text: page.entry?.isTrailingEmpty
-                ? "New workspace"
-                : `Workspace ${page.entry?.id ?? ""}`
-            color: TuiStyle.fg
-            font.pixelSize: Appearance.font.pixelSize.normal
-            font.weight: Font.DemiBold
-        }
-    }
-
     DropArea {
         id: pageDrop
         anchors.fill: parent

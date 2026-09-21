@@ -65,6 +65,17 @@ Item {
     property int swipeStartIndex: -1
     property int settlementIndex: -1
     readonly property bool workspaceInteractionEnabled: !root.swipeActive && !root.swipeSettling
+    readonly property int swipePreviewIndex: {
+        if (root.swipeSettling && root.settlementIndex >= 0)
+            return root.settlementIndex;
+        if (!root.swipeActive || root.swipeStartIndex < 0 || Math.abs(root.swipeOffset) < 4)
+            return root.selectedIndex;
+        const candidate = root.swipeStartIndex + (root.swipeOffset < 0 ? 1 : -1);
+        return candidate >= 0 && candidate < root.entries.length
+            ? candidate : root.swipeStartIndex;
+    }
+    readonly property int highlightedWorkspaceId: root.entries[root.swipePreviewIndex]?.id
+        ?? root.selectedWorkspaceId
 
     function usableLogicalWidth(mon) {
         const transform = mon?.transform ?? 0;
@@ -146,6 +157,8 @@ Item {
             nextOffset = nextOffset * 0.28;
         root.swipeOffset = Math.max(-root.pageSpan * 1.04,
             Math.min(root.pageSpan * 1.04, nextOffset));
+        if (targetIndex >= 0 && targetIndex < root.entries.length)
+            topList.positionViewAtIndex(targetIndex, ListView.Contain);
     }
 
     function endSwipe(cancelled) {
@@ -161,6 +174,8 @@ Item {
         const commit = !cancelled && targetExists && (passedDistance || passedVelocity);
 
         root.settlementIndex = commit ? targetIndex : root.swipeStartIndex;
+        if (root.settlementIndex >= 0)
+            topList.positionViewAtIndex(root.settlementIndex, ListView.Contain);
         settleAnimation.to = commit ? -direction * root.pageSpan : 0;
         settleAnimation.duration = commit ? 230 : 200;
         root.swipeSettling = true;
@@ -279,8 +294,8 @@ Item {
             radius: 10
             clip: true
             color: Appearance.colors.colSurfaceContainerLow
-            border.width: modelData.id === root.selectedWorkspaceId ? 3 : 1
-            border.color: modelData.id === root.selectedWorkspaceId
+            border.width: modelData.id === root.highlightedWorkspaceId ? 3 : 1
+            border.color: modelData.id === root.highlightedWorkspaceId
                 ? TuiStyle.accent
                 : ColorUtils.transparentize(TuiStyle.fg, 0.55)
 
@@ -315,26 +330,6 @@ Item {
                     closeOnActivate: false
                     interactionEnabled: root.workspaceInteractionEnabled
                     onActivated: root.selectWorkspace(topCard.modelData.id)
-                }
-            }
-
-            Rectangle {
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.margins: 8
-                width: topLabel.implicitWidth + 14
-                height: topLabel.implicitHeight + 8
-                radius: height / 2
-                color: ColorUtils.transparentize(TuiStyle.bg, 0.18)
-                z: 80
-
-                StyledText {
-                    id: topLabel
-                    anchors.centerIn: parent
-                    text: topCard.modelData.isTrailingEmpty ? "+" : `Workspace ${topCard.modelData.id}`
-                    color: TuiStyle.fg
-                    font.pixelSize: Appearance.font.pixelSize.smaller
-                    font.weight: Font.DemiBold
                 }
             }
 

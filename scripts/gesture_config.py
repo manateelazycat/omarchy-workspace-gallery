@@ -13,17 +13,18 @@ BLOCK = f'''{START}
 -- Managed by Workspace Gallery. Use scripts/gestures uninstall to remove.
 hl.gesture({{
   fingers = 3,
-  direction = "up",
-  action = function()
-    hl.dispatch(hl.dsp.global("quickshell:workspaceGalleryOpen"))
-  end,
-}})
-hl.gesture({{
-  fingers = 3,
-  direction = "down",
-  action = function()
-    hl.dispatch(hl.dsp.global("quickshell:workspaceGalleryClose"))
-  end,
+  direction = "vertical",
+  action = {{
+    start = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-vertical,start," .. e.delta.y .. "," .. e.time_ms))
+    end,
+    update = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-vertical,update," .. e.delta.y .. "," .. e.time_ms))
+    end,
+    finish = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-vertical,finish," .. tostring(e.cancelled) .. "," .. e.time_ms))
+    end,
+  }},
 }})
 hl.gesture({{
   fingers = 3,

@@ -23,15 +23,18 @@ test("gallery preserves the requested 20/80 screen split", () => {
   assert.match(source, /DropArea\s*\{/);
 });
 
-test("vertical commands and a live horizontal three-finger gesture are managed", () => {
+test("vertical and horizontal three-finger gestures are live and distance-aware", () => {
   const source = read("scripts/gesture_config.py");
-  for (const direction of ["up", "down", "horizontal"])
+  for (const direction of ["vertical", "horizontal"])
     assert.match(source, new RegExp(`direction = \\"${direction}\\"`));
-  for (const action of ["Open", "Close"])
-    assert.match(source, new RegExp(`workspaceGallery${action}`));
   for (const phase of ["start", "update", "finish"])
     assert.match(source, new RegExp(`${phase} = function\\(e\\)`));
   assert.match(source, /hl\.dsp\.event\("workspace-gallery-swipe/);
+  assert.match(source, /hl\.dsp\.event\("workspace-gallery-vertical/);
+
+  const gallery = read("Gallery.qml");
+  assert.match(gallery, /verticalSwipeDistance <= -140/);
+  assert.match(gallery, /verticalSwipeDistance >= 90/);
 });
 
 test("bottom gallery uses a follow-finger workspace track", () => {
@@ -42,6 +45,15 @@ test("bottom gallery uses a follow-finger workspace track", () => {
   assert.match(source, /function endSwipe/);
   assert.match(source, /NumberAnimation\s*\{/);
   assert.match(source, /GalleryWorkspacePage\s*\{/);
+});
+
+test("workspace labels are hidden and swipe target drives the top highlight", () => {
+  const gallery = read("GalleryWidget.qml");
+  const page = read("GalleryWorkspacePage.qml");
+  assert.doesNotMatch(gallery, /`Workspace \$\{topCard\.modelData\.id\}`/);
+  assert.doesNotMatch(page, /`Workspace \$\{page\.entry/);
+  assert.match(gallery, /highlightedWorkspaceId/);
+  assert.match(gallery, /modelData\.id === root\.highlightedWorkspaceId/);
 });
 
 test("high-frequency swipe events do not refresh the workspace data model", () => {

@@ -12,6 +12,7 @@ Scope {
 
     property string lockedScreenName: ""
     property real outsideSwipeDistance: 0
+    property real verticalSwipeDistance: 0
     property var focusedScreen: Quickshell.screens.find(
         screen => screen.name === (galleryScope.lockedScreenName || Hyprland.focusedMonitor?.name))
         ?? Quickshell.screens[0]
@@ -51,10 +52,33 @@ Scope {
 
     function handleSwipeEvent(data) {
         const parts = String(data ?? "").split(",");
-        if (parts[0] !== "workspace-gallery-swipe" || parts.length < 2)
+        if (parts.length < 2)
             return;
 
+        const channel = parts[0];
         const phase = parts[1];
+        if (channel === "workspace-gallery-vertical") {
+            if (phase === "start") {
+                galleryScope.verticalSwipeDistance = Number(parts[2] ?? 0);
+            } else if (phase === "update") {
+                galleryScope.verticalSwipeDistance += Number(parts[2] ?? 0);
+            } else if (phase === "finish") {
+                const cancelled = parts[2] === "true";
+                if (!cancelled && galleryScope.verticalSwipeDistance <= -140
+                        && !GlobalStates.overviewOpen) {
+                    galleryScope.open({});
+                } else if (!cancelled && galleryScope.verticalSwipeDistance >= 90
+                        && GlobalStates.overviewOpen) {
+                    galleryScope.close();
+                }
+                galleryScope.verticalSwipeDistance = 0;
+            }
+            return;
+        }
+
+        if (channel !== "workspace-gallery-swipe")
+            return;
+
         if (phase === "start") {
             galleryScope.outsideSwipeDistance = 0;
             const delta = Number(parts[2] ?? 0);
