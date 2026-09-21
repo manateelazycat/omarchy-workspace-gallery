@@ -13,6 +13,12 @@ Rectangle {
     required property var screen
     required property url wallpaperUrl
     property bool interactionEnabled: true
+    readonly property var windowAddresses: page.entry
+        ? page.galleryRoot.windowAddressesForWorkspace(page.entry.id)
+        : []
+    readonly property real singleWindowVerticalInset: page.windowAddresses.length === 1
+        ? Math.max(12, Math.min(24, page.height * 0.035))
+        : 0
 
     radius: 12
     clip: true
@@ -38,9 +44,7 @@ Rectangle {
 
     Repeater {
         model: ScriptModel {
-            values: page.entry
-                ? page.galleryRoot.windowAddressesForWorkspace(page.entry.id)
-                : []
+            values: page.windowAddresses
         }
         delegate: GalleryWindow {
             required property string modelData
@@ -49,9 +53,9 @@ Rectangle {
             screen: page.screen
             sourceWorkspaceId: page.entry?.id ?? -1
             previewX: 0
-            previewY: 0
+            previewY: page.singleWindowVerticalInset
             previewWidth: page.width
-            previewHeight: page.height
+            previewHeight: Math.max(1, page.height - page.singleWindowVerticalInset * 2)
             closeOnActivate: true
             interactionEnabled: page.interactionEnabled
             onActivated: windowData => page.galleryRoot.activateWindow(windowData)

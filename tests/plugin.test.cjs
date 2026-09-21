@@ -103,6 +103,14 @@ test("bottom gallery uses a follow-finger workspace track", () => {
   assert.match(source, /GalleryWorkspacePage\s*\{/);
 });
 
+test("a lone window has vertical breathing room in the large preview", () => {
+  const page = read("GalleryWorkspacePage.qml");
+  assert.match(page, /singleWindowVerticalInset: page\.windowAddresses\.length === 1/);
+  assert.match(page, /Math\.max\(12, Math\.min\(24, page\.height \* 0\.035\)\)/);
+  assert.match(page, /previewY: page\.singleWindowVerticalInset/);
+  assert.match(page, /previewHeight: Math\.max\(1, page\.height - page\.singleWindowVerticalInset \* 2\)/);
+});
+
 test("workspace labels are hidden and swipe target drives the top highlight", () => {
   const gallery = read("GalleryWidget.qml");
   const page = read("GalleryWorkspacePage.qml");
