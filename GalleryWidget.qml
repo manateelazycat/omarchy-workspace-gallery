@@ -294,10 +294,7 @@ Item {
             radius: 10
             clip: true
             color: Appearance.colors.colSurfaceContainerLow
-            border.width: modelData.id === root.highlightedWorkspaceId ? 3 : 1
-            border.color: modelData.id === root.highlightedWorkspaceId
-                ? TuiStyle.accent
-                : ColorUtils.transparentize(TuiStyle.fg, 0.55)
+            border.width: 0
 
             Image {
                 anchors.fill: parent
@@ -350,6 +347,17 @@ Item {
                         topCard.modelData.monitorName ?? "");
                 }
                 onExited: WorkspaceNavigation.clearDragTarget(topCard.modelData.id)
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: topCard.radius
+                color: "transparent"
+                border.width: topCard.modelData.id === root.highlightedWorkspaceId ? 4 : 1
+                border.color: topCard.modelData.id === root.highlightedWorkspaceId
+                    ? TuiStyle.accent
+                    : ColorUtils.transparentize(TuiStyle.fg, 0.55)
+                z: 100
             }
 
             Connections {

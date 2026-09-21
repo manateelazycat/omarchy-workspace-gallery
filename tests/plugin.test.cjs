@@ -53,7 +53,8 @@ test("workspace labels are hidden and swipe target drives the top highlight", ()
   assert.doesNotMatch(gallery, /`Workspace \$\{topCard\.modelData\.id\}`/);
   assert.doesNotMatch(page, /`Workspace \$\{page\.entry/);
   assert.match(gallery, /highlightedWorkspaceId/);
-  assert.match(gallery, /modelData\.id === root\.highlightedWorkspaceId/);
+  assert.match(gallery, /border\.width: topCard\.modelData\.id === root\.highlightedWorkspaceId \? 4 : 1/);
+  assert.match(gallery, /z: 100/);
 });
 
 test("high-frequency swipe events do not refresh the workspace data model", () => {
