@@ -1,0 +1,159 @@
+pragma ComponentBehavior: Bound
+import "."
+import qs.Commons
+import QtQuick
+import Quickshell
+import Quickshell.Wayland
+import Quickshell.Hyprland
+import Quickshell.Hyprland._GlobalShortcuts 0.0
+
+Scope {
+    id: galleryScope
+
+    property string lockedScreenName: ""
+    property var focusedScreen: Quickshell.screens.find(
+        screen => screen.name === (galleryScope.lockedScreenName || Hyprland.focusedMonitor?.name))
+        ?? Quickshell.screens[0]
+        ?? null
+
+    function currentWorkspaceId() {
+        return WorkspaceNavigation.currentWorkspaceId();
+    }
+
+    function open(payload) {
+        const anchor = Hyprland.focusedMonitor?.name ?? "";
+        galleryScope.lockedScreenName = anchor;
+        GlobalStates.overviewAnchorMonitorName = anchor;
+        GlobalStates.overviewFocusedWorkspaceId = galleryScope.currentWorkspaceId();
+        GlobalStates.overviewOpen = true;
+    }
+
+    function close() {
+        GlobalStates.overviewOpen = false;
+    }
+
+    function toggle() {
+        if (GlobalStates.overviewOpen)
+            galleryScope.close();
+        else
+            galleryScope.open({});
+    }
+
+    function selectRelative(delta) {
+        if (!GlobalStates.overviewOpen) {
+            Hyprland.dispatch(`hl.dsp.focus({ workspace = "e${delta > 0 ? "+1" : "-1"}" })`);
+            return;
+        }
+        WorkspaceNavigation.navigateByIndex(delta, true);
+    }
+
+    function activateSelection() {
+        WorkspaceNavigation.commitSelectedWorkspace();
+        galleryScope.close();
+    }
+
+    function isFocusedScreen(screen) {
+        return screen?.name === galleryScope.focusedScreen?.name;
+    }
+
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen)
+                return;
+            CrossMonitorDrag.end();
+            WorkspaceNavigation.resetOverviewDragState();
+            GlobalStates.overviewPendingWorkspaceMonitorById = ({});
+            GlobalStates.overviewPendingOccupiedWorkspaces = [];
+            GlobalStates.overviewFocusedWorkspaceId = -1;
+            galleryScope.lockedScreenName = "";
+            GlobalStates.overviewAnchorMonitorName = "";
+        }
+    }
+
+    Variants {
+        model: Quickshell.screens
+
+        LazyLoader {
+            id: panelLoader
+            required property ShellScreen modelData
+            active: true
+
+            component: PanelWindow {
+                id: panelWindow
+                screen: panelLoader.modelData
+                visible: GlobalStates.overviewOpen
+                color: "transparent"
+                exclusionMode: ExclusionMode.Ignore
+
+                WlrLayershell.namespace: "omarchy-workspace-gallery"
+                WlrLayershell.layer: WlrLayer.Overlay
+                WlrLayershell.keyboardFocus: galleryScope.isFocusedScreen(panelWindow.screen)
+                    && GlobalStates.overviewOpen
+                    ? WlrKeyboardFocus.Exclusive
+                    : WlrKeyboardFocus.None
+
+                anchors {
+                    top: true
+                    bottom: true
+                    left: true
+                    right: true
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    active: GlobalStates.overviewOpen
+                    asynchronous: false
+                    sourceComponent: GalleryWidget {
+                        screen: panelWindow.screen
+                    }
+                }
+
+                Item {
+                    anchors.fill: parent
+                    focus: galleryScope.isFocusedScreen(panelWindow.screen)
+
+                    Keys.onPressed: event => {
+                        if (event.key === Qt.Key_Escape) {
+                            galleryScope.close();
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Left || event.key === Qt.Key_H) {
+                            galleryScope.selectRelative(-1);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Right || event.key === Qt.Key_L) {
+                            galleryScope.selectRelative(1);
+                            event.accepted = true;
+                        } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Space) {
+                            galleryScope.activateSelection();
+                            event.accepted = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    GlobalShortcut {
+        name: "workspaceGalleryOpen"
+        description: "Open Workspace Gallery"
+        onPressed: galleryScope.open({})
+    }
+
+    GlobalShortcut {
+        name: "workspaceGalleryClose"
+        description: "Close Workspace Gallery"
+        onPressed: galleryScope.close()
+    }
+
+    GlobalShortcut {
+        name: "workspaceGalleryNext"
+        description: "Select the next gallery workspace"
+        onPressed: galleryScope.selectRelative(1)
+    }
+
+    GlobalShortcut {
+        name: "workspaceGalleryPrevious"
+        description: "Select the previous gallery workspace"
+        onPressed: galleryScope.selectRelative(-1)
+    }
+}

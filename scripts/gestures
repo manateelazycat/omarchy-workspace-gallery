@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+action="${1:-}"
+if [[ "$action" != "install" && "$action" != "uninstall" ]]; then
+  echo "Usage: $0 {install|uninstall}" >&2
+  exit 2
+fi
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+python3 "$script_dir/gesture_config.py" "$action"
+hyprctl reload
+errors="$(hyprctl configerrors)"
+if [[ -n "$errors" ]]; then
+  echo "$errors" >&2
+  exit 1
+fi
+echo "Hyprland configuration is valid."

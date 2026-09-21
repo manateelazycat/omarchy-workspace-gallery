@@ -1,0 +1,4 @@
+.qmllint.ini.user
+node_modules/
+*.log
+

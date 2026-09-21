@@ -1,0 +1,27 @@
+module io.github.manateelazycat.workspace.gallery
+singleton AppSearch 1.0 AppSearch.qml
+singleton MenuSearch 1.0 MenuSearch.qml
+singleton Appearance 1.0 Appearance.qml
+singleton Config 1.0 Config.qml
+singleton CrossMonitorDrag 1.0 CrossMonitorDrag.qml
+singleton Directories 1.0 Directories.qml
+singleton FileUtils 1.0 FileUtils.qml
+singleton GlobalFocusGrab 1.0 GlobalFocusGrab.qml
+singleton GlobalStates 1.0 GlobalStates.qml
+singleton HyprlandData 1.0 HyprlandData.qml
+singleton OmarchyTheme 1.0 OmarchyTheme.qml
+singleton ServiceManager 1.0 ServiceManager.qml
+singleton TuiStyle 1.0 TuiStyle.qml
+singleton Wallpaper 1.0 Wallpaper.qml
+singleton WorkspaceOrder 1.0 WorkspaceOrder.qml
+singleton WorkspaceNavigation 1.0 WorkspaceNavigation.qml
+singleton OverviewSwitchingController 1.0 OverviewSwitchingController.qml
+Overview 1.0 Overview.qml
+OverviewSearch 1.0 OverviewSearch.qml
+OverviewWidget 1.0 OverviewWidget.qml
+OverviewWindow 1.0 OverviewWindow.qml
+Gallery 1.0 Gallery.qml
+GalleryWidget 1.0 GalleryWidget.qml
+GalleryWindow 1.0 GalleryWindow.qml
+StyledText 1.0 StyledText.qml
+StyledImage 1.0 StyledImage.qml

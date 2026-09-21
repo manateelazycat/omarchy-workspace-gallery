@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.manateelazycat.workspace-gallery",
+  "name": "Workspace Gallery",
+  "version": "0.1.0",
+  "author": "ManateeLazyCat",
+  "license": "MIT",
+  "description": "A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.",
+  "keepLoaded": true,
+  "kinds": ["panel"],
+  "entryPoints": {
+    "panel": "Gallery.qml"
+  }
+}
