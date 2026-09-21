@@ -88,12 +88,17 @@ test("drop coordinates are mapped into the real workspace before tiled insertion
   assert.match(navigation, /x = \$\{restoreX\}, y = \$\{restoreY\}/);
 });
 
-test("same-workspace drops swap with the tiled window under the pointer", () => {
+test("same-workspace drags reorder tiled windows before release", () => {
+  const galleryWindow = read("GalleryWindow.qml");
   const navigation = read("WorkspaceNavigation.qml");
   assert.match(navigation, /function tiledWindowAt\(workspaceId, windowAddress, placement\)/);
   assert.match(navigation, /dropX >= x && dropX <= x \+ width/);
+  assert.match(navigation, /function reorderWindowDrag\(windowAddress, workspaceId, placement, previousTargetAddress\)/);
   assert.match(navigation, /hl\.dsp\.focus\(\{ window = "address:\$\{windowAddress\}" \}\)/);
-  assert.match(navigation, /hl\.dsp\.window\.swap\(\{ target = "address:\$\{swapTargetAddress\}" \}\)/);
+  assert.match(navigation, /hl\.dsp\.window\.swap\(\{ target = "address:\$\{targetAddress\}" \}\)/);
+  assert.match(galleryWindow, /CrossMonitorDrag\.updatePointer[\s\S]*root\.updateLiveLayout\(\)/);
+  assert.match(galleryWindow, /dropTarget\.id !== root\.sourceWorkspaceId/);
+  assert.match(galleryWindow, /layoutAlreadyCommitted/);
 });
 
 test("a stationary click does not start the window drag animation", () => {

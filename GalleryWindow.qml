@@ -38,10 +38,47 @@ OverviewWindow {
     property real pressSceneY: 0
     property real pressLocalX: 0
     property real pressLocalY: 0
+    property bool liveReordered: false
+    property string liveSwapTargetAddress: ""
+
+    function placementForTarget(dropTarget) {
+        if (!dropTarget || dropTarget.w <= 0 || dropTarget.h <= 0
+                || dropTarget.workW <= 0 || dropTarget.workH <= 0)
+            return null;
+        const normalizedX = Math.max(0, Math.min(1,
+            (CrossMonitorDrag.pointerX - dropTarget.x) / dropTarget.w));
+        const normalizedY = Math.max(0, Math.min(1,
+            (CrossMonitorDrag.pointerY - dropTarget.y) / dropTarget.h));
+        return {
+            dropX: dropTarget.workX + normalizedX * dropTarget.workW,
+            dropY: dropTarget.workY + normalizedY * dropTarget.workH,
+            restoreX: CrossMonitorDrag.pointerX,
+            restoreY: CrossMonitorDrag.pointerY
+        };
+    }
+
+    function updateLiveLayout() {
+        const dropTarget = CrossMonitorDrag.hoveredTarget;
+        if (!dropTarget || dropTarget.id !== root.sourceWorkspaceId) {
+            root.liveSwapTargetAddress = "";
+            return;
+        }
+        const placement = root.placementForTarget(dropTarget);
+        const result = WorkspaceNavigation.reorderWindowDrag(
+            root.address,
+            root.sourceWorkspaceId,
+            placement,
+            root.liveSwapTargetAddress);
+        root.liveSwapTargetAddress = result.address;
+        if (result.changed)
+            root.liveReordered = true;
+    }
 
     function beginPointerDrag(pointerSceneX, pointerSceneY) {
         if (root.Drag.active)
             return;
+        root.liveReordered = false;
+        root.liveSwapTargetAddress = "";
         root.snapshotPreview();
         WorkspaceNavigation.beginWindowDrag(root.sourceWorkspaceId);
         CrossMonitorDrag.begin(
@@ -118,6 +155,7 @@ OverviewWindow {
             CrossMonitorDrag.updatePointer(
                 root.galleryRoot.monitorOriginX + point.x,
                 root.galleryRoot.monitorOriginY + point.y);
+            root.updateLiveLayout();
         }
 
         onPressed: mouse => {
@@ -146,20 +184,8 @@ OverviewWindow {
                 ?? GlobalStates.overviewDraggingTargetIsTrailing;
             const targetMonitor = dropTarget?.workspaceMonitorName
                 ?? GlobalStates.overviewDraggingTargetMonitor;
-            let placement = null;
-            if (dropTarget && dropTarget.w > 0 && dropTarget.h > 0
-                    && dropTarget.workW > 0 && dropTarget.workH > 0) {
-                const normalizedX = Math.max(0, Math.min(1,
-                    (CrossMonitorDrag.pointerX - dropTarget.x) / dropTarget.w));
-                const normalizedY = Math.max(0, Math.min(1,
-                    (CrossMonitorDrag.pointerY - dropTarget.y) / dropTarget.h));
-                placement = {
-                    dropX: dropTarget.workX + normalizedX * dropTarget.workW,
-                    dropY: dropTarget.workY + normalizedY * dropTarget.workH,
-                    restoreX: CrossMonitorDrag.pointerX,
-                    restoreY: CrossMonitorDrag.pointerY
-                };
-            }
+            const placement = root.placementForTarget(dropTarget);
+            const layoutAlreadyCommitted = root.liveReordered;
             CrossMonitorDrag.end();
             root.pressed = false;
             root.Drag.active = false;
@@ -171,7 +197,10 @@ OverviewWindow {
                 targetWorkspace,
                 targetIsTrailing,
                 targetMonitor,
-                placement);
+                placement,
+                layoutAlreadyCommitted);
+            root.liveReordered = false;
+            root.liveSwapTargetAddress = "";
         }
 
         onClicked: event => {

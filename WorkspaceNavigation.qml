@@ -228,6 +228,34 @@ Singleton {
         return "";
     }
 
+    function swapTiledWindows(windowAddress, targetAddress, workspaceId) {
+        if (!windowAddress || !targetAddress)
+            return false;
+        const activeWorkspaceId = ServiceManager.workspace.activeWorkspace?.id ?? workspaceId;
+        const restoreWorkspace = activeWorkspaceId !== workspaceId
+            ? `hl.dispatch(hl.dsp.focus({ workspace = ${activeWorkspaceId} }))`
+            : "";
+        Hyprland.dispatch(`function()
+            hl.dispatch(hl.dsp.focus({ window = "address:${windowAddress}" }))
+            hl.dispatch(hl.dsp.window.swap({ target = "address:${targetAddress}" }))
+            ${restoreWorkspace}
+        end`);
+        GlobalStates.refreshOverviewModel();
+        root.pendingDragRefreshes = 2;
+        refreshAfterDragTimer.restart();
+        return true;
+    }
+
+    function reorderWindowDrag(windowAddress, workspaceId, placement, previousTargetAddress) {
+        const targetAddress = root.tiledWindowAt(workspaceId, windowAddress, placement);
+        if (!targetAddress || targetAddress === previousTargetAddress)
+            return { address: targetAddress, changed: false };
+        return {
+            address: targetAddress,
+            changed: root.swapTiledWindows(windowAddress, targetAddress, workspaceId)
+        };
+    }
+
     function dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement) {
         const move = `hl.dispatch(hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" }))`;
         if (!placement || !Number.isFinite(placement.dropX) || !Number.isFinite(placement.dropY)) {
@@ -244,16 +272,7 @@ Singleton {
         if (targetWorkspace === currentWorkspaceId) {
             const swapTargetAddress = root.tiledWindowAt(targetWorkspace, windowAddress, placement);
             if (swapTargetAddress.length > 0) {
-                const activeWorkspaceId = ServiceManager.workspace.activeWorkspace?.id ?? currentWorkspaceId;
-                const restoreWorkspace = activeWorkspaceId !== currentWorkspaceId
-                    ? `hl.dispatch(hl.dsp.focus({ workspace = ${activeWorkspaceId} }))`
-                    : "";
-                Hyprland.dispatch(`function()
-                    hl.dispatch(hl.dsp.focus({ window = "address:${windowAddress}" }))
-                    hl.dispatch(hl.dsp.window.swap({ target = "address:${swapTargetAddress}" }))
-                    ${restoreWorkspace}
-                end`);
-                return true;
+                return root.swapTiledWindows(windowAddress, swapTargetAddress, currentWorkspaceId);
             }
 
             Hyprland.dispatch(`function()
@@ -275,7 +294,7 @@ Singleton {
         return true;
     }
 
-    function commitWindowDrag(windowAddress, currentWorkspaceId, targetWorkspace, targetIsTrailing, targetMonitorHint, placement) {
+    function commitWindowDrag(windowAddress, currentWorkspaceId, targetWorkspace, targetIsTrailing, targetMonitorHint, placement, layoutAlreadyCommitted) {
         root.resetOverviewDragState();
         if (!windowAddress || targetWorkspace === -1)
             return false;
@@ -283,6 +302,12 @@ Singleton {
         const draggedWindow = ServiceManager.workspace.clientByAddress(windowAddress);
         if (targetWorkspace === currentWorkspaceId && draggedWindow?.floating)
             return false;
+        if (targetWorkspace === currentWorkspaceId && layoutAlreadyCommitted) {
+            GlobalStates.refreshOverviewModel();
+            root.pendingDragRefreshes = 2;
+            refreshAfterDragTimer.restart();
+            return true;
+        }
 
         const sourceVisibleWindows = ServiceManager.workspace.hyprlandClientsForWorkspace(currentWorkspaceId)
             .filter(win => win.mapped && !win.hidden);
