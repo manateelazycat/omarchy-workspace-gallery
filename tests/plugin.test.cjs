@@ -96,6 +96,9 @@ test("same-workspace drags reorder tiled windows before release", () => {
   assert.match(navigation, /function reorderWindowDrag\(windowAddress, workspaceId, placement, previousTargetAddress\)/);
   assert.match(navigation, /hl\.dsp\.focus\(\{ window = "address:\$\{windowAddress\}" \}\)/);
   assert.match(navigation, /hl\.dsp\.window\.swap\(\{ target = "address:\$\{targetAddress\}" \}\)/);
+  assert.match(navigation, /hl\.timer\(function\(\)[\s\S]*hl\.dsp\.window\.swap/);
+  assert.match(navigation, /timeout = 1, type = "oneshot"/);
+  assert.match(navigation, /hl\.dsp\.cursor\.move\(\{ x = \$\{restoreX\}, y = \$\{restoreY\} \}\)/);
   assert.match(galleryWindow, /CrossMonitorDrag\.updatePointer[\s\S]*root\.updateLiveLayout\(\)/);
   assert.match(galleryWindow, /dropTarget\.id !== root\.sourceWorkspaceId/);
   assert.match(galleryWindow, /layoutAlreadyCommitted/);

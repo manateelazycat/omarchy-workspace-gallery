@@ -228,17 +228,24 @@ Singleton {
         return "";
     }
 
-    function swapTiledWindows(windowAddress, targetAddress, workspaceId) {
-        if (!windowAddress || !targetAddress)
+    function swapTiledWindows(windowAddress, targetAddress, workspaceId, placement) {
+        if (!windowAddress || !targetAddress || !placement
+                || !Number.isFinite(placement.restoreX) || !Number.isFinite(placement.restoreY))
             return false;
         const activeWorkspaceId = ServiceManager.workspace.activeWorkspace?.id ?? workspaceId;
         const restoreWorkspace = activeWorkspaceId !== workspaceId
             ? `hl.dispatch(hl.dsp.focus({ workspace = ${activeWorkspaceId} }))`
             : "";
+        const restoreX = Math.round(placement.restoreX);
+        const restoreY = Math.round(placement.restoreY);
         Hyprland.dispatch(`function()
             hl.dispatch(hl.dsp.focus({ window = "address:${windowAddress}" }))
-            hl.dispatch(hl.dsp.window.swap({ target = "address:${targetAddress}" }))
-            ${restoreWorkspace}
+            hl.dispatch(hl.dsp.cursor.move({ x = ${restoreX}, y = ${restoreY} }))
+            hl.timer(function()
+                hl.dispatch(hl.dsp.window.swap({ target = "address:${targetAddress}" }))
+                ${restoreWorkspace}
+                hl.dispatch(hl.dsp.cursor.move({ x = ${restoreX}, y = ${restoreY} }))
+            end, { timeout = 1, type = "oneshot" })
         end`);
         GlobalStates.refreshOverviewModel();
         root.pendingDragRefreshes = 2;
@@ -252,7 +259,7 @@ Singleton {
             return { address: targetAddress, changed: false };
         return {
             address: targetAddress,
-            changed: root.swapTiledWindows(windowAddress, targetAddress, workspaceId)
+            changed: root.swapTiledWindows(windowAddress, targetAddress, workspaceId, placement)
         };
     }
 
@@ -272,7 +279,7 @@ Singleton {
         if (targetWorkspace === currentWorkspaceId) {
             const swapTargetAddress = root.tiledWindowAt(targetWorkspace, windowAddress, placement);
             if (swapTargetAddress.length > 0) {
-                return root.swapTiledWindows(windowAddress, swapTargetAddress, currentWorkspaceId);
+                return root.swapTiledWindows(windowAddress, swapTargetAddress, currentWorkspaceId, placement);
             }
 
             Hyprland.dispatch(`function()
