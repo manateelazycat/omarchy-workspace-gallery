@@ -215,6 +215,9 @@ Item {
 
     function registerDropTarget(item, entry) {
         const point = item.mapToItem(null, 0, 0);
+        const targetMonitor = ServiceManager.workspace.monitors.find(
+            monitor => monitor.name === (entry?.monitorName ?? "")) ?? root.monitorData;
+        const reserved = targetMonitor?.reserved ?? [0, 0, 0, 0];
         CrossMonitorDrag.publishTarget(
             root.monitor?.name ?? "",
             entry?.monitorName ?? "",
@@ -223,7 +226,11 @@ Item {
             root.monitorOriginX + point.x,
             root.monitorOriginY + point.y,
             item.width,
-            item.height);
+            item.height,
+            (targetMonitor?.x ?? root.monitorOriginX) + (reserved[0] ?? 0),
+            (targetMonitor?.y ?? root.monitorOriginY) + (reserved[1] ?? 0),
+            root.usableLogicalWidth(targetMonitor),
+            root.usableLogicalHeight(targetMonitor));
     }
 
     onEntriesChanged: {

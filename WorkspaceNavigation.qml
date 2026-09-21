@@ -203,14 +203,44 @@ Singleton {
         }
     }
 
-    function commitWindowDrag(windowAddress, currentWorkspaceId, targetWorkspace, targetIsTrailing, targetMonitorHint) {
+    function dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement) {
+        const move = `hl.dispatch(hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" }))`;
+        if (!placement || !Number.isFinite(placement.dropX) || !Number.isFinite(placement.dropY)) {
+            if (targetWorkspace === currentWorkspaceId)
+                return false;
+            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" })`);
+            return true;
+        }
+
+        const dropX = Math.round(placement.dropX);
+        const dropY = Math.round(placement.dropY);
+        const restoreX = Math.round(placement.restoreX);
+        const restoreY = Math.round(placement.restoreY);
+        const detach = targetWorkspace === currentWorkspaceId
+            ? `hl.dispatch(hl.dsp.window.move({ workspace = "special:workspace-gallery-staging", follow = false, window = "address:${windowAddress}" }))`
+            : "";
+        Hyprland.dispatch(`function()
+            ${detach}
+            hl.dispatch(hl.dsp.cursor.move({ x = ${dropX}, y = ${dropY} }))
+            ${move}
+            hl.dispatch(hl.dsp.cursor.move({ x = ${restoreX}, y = ${restoreY} }))
+        end`);
+        return true;
+    }
+
+    function commitWindowDrag(windowAddress, currentWorkspaceId, targetWorkspace, targetIsTrailing, targetMonitorHint, placement) {
         root.resetOverviewDragState();
-        if (!windowAddress || targetWorkspace === -1 || targetWorkspace === currentWorkspaceId)
+        if (!windowAddress || targetWorkspace === -1)
+            return false;
+
+        const draggedWindow = ServiceManager.workspace.clientByAddress(windowAddress);
+        if (targetWorkspace === currentWorkspaceId && draggedWindow?.floating)
             return false;
 
         const sourceVisibleWindows = ServiceManager.workspace.hyprlandClientsForWorkspace(currentWorkspaceId)
             .filter(win => win.mapped && !win.hidden);
-        const sourceIsEmptyAfterMove = sourceVisibleWindows.length <= 1;
+        const sourceIsEmptyAfterMove = targetWorkspace !== currentWorkspaceId
+            && sourceVisibleWindows.length <= 1;
 
         // IDs of trailing cards may repeat per monitor. The caller resolves the
         // owning monitor from the rendered card before reaching this function.
@@ -234,11 +264,12 @@ Singleton {
                 sourceWorkspaceId: currentWorkspaceId
             });
             GlobalStates.overviewPendingOccupiedWorkspaces = filtered;
-            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" })`);
+            root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement);
             if (targetMonitorName.length > 0)
                 Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${targetWorkspace}", monitor = "${targetMonitorName}" })`);
         } else {
-            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" })`);
+            if (!root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement))
+                return false;
             if (targetMonitorName.length > 0)
                 Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${targetWorkspace}", monitor = "${targetMonitorName}" })`);
         }

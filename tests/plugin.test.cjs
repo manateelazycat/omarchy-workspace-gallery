@@ -69,6 +69,22 @@ test("windows dragged from the large preview use a one-third-size proxy", () => 
   assert.match(widget, /CrossMonitorDrag\.sourceHeight \/ 3/);
 });
 
+test("drop coordinates are mapped into the real workspace before tiled insertion", () => {
+  const galleryWindow = read("GalleryWindow.qml");
+  const galleryWidget = read("GalleryWidget.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+  const dragBridge = read("CrossMonitorDrag.qml");
+
+  assert.match(galleryWindow, /normalizedX/);
+  assert.match(galleryWindow, /dropTarget\.workX \+ normalizedX \* dropTarget\.workW/);
+  assert.match(galleryWindow, /dropTarget\.workY \+ normalizedY \* dropTarget\.workH/);
+  assert.match(galleryWidget, /root\.usableLogicalWidth\(targetMonitor\)/);
+  assert.match(dragBridge, /workX,\s+workY,\s+workW,\s+workH/);
+  assert.match(navigation, /hl\.dsp\.cursor\.move\(\{ x = \$\{dropX\}, y = \$\{dropY\} \}\)/);
+  assert.match(navigation, /special:workspace-gallery-staging/);
+  assert.match(navigation, /x = \$\{restoreX\}, y = \$\{restoreY\}/);
+});
+
 test("high-frequency swipe events do not refresh the workspace data model", () => {
   assert.match(read("HyprlandData.qml"), /"custom"\]\.includes\(event\.name\)/);
 });

@@ -121,9 +121,27 @@ OverviewWindow {
         onReleased: {
             if (!root.pressed)
                 return;
-            const targetWorkspace = GlobalStates.overviewDraggingTargetWorkspace;
-            const targetIsTrailing = GlobalStates.overviewDraggingTargetIsTrailing;
-            const targetMonitor = GlobalStates.overviewDraggingTargetMonitor;
+            const dropTarget = CrossMonitorDrag.hoveredTarget;
+            const targetWorkspace = dropTarget?.id
+                ?? GlobalStates.overviewDraggingTargetWorkspace;
+            const targetIsTrailing = dropTarget?.isTrailing
+                ?? GlobalStates.overviewDraggingTargetIsTrailing;
+            const targetMonitor = dropTarget?.workspaceMonitorName
+                ?? GlobalStates.overviewDraggingTargetMonitor;
+            let placement = null;
+            if (dropTarget && dropTarget.w > 0 && dropTarget.h > 0
+                    && dropTarget.workW > 0 && dropTarget.workH > 0) {
+                const normalizedX = Math.max(0, Math.min(1,
+                    (CrossMonitorDrag.pointerX - dropTarget.x) / dropTarget.w));
+                const normalizedY = Math.max(0, Math.min(1,
+                    (CrossMonitorDrag.pointerY - dropTarget.y) / dropTarget.h));
+                placement = {
+                    dropX: dropTarget.workX + normalizedX * dropTarget.workW,
+                    dropY: dropTarget.workY + normalizedY * dropTarget.workH,
+                    restoreX: CrossMonitorDrag.pointerX,
+                    restoreY: CrossMonitorDrag.pointerY
+                };
+            }
             CrossMonitorDrag.end();
             root.pressed = false;
             root.Drag.active = false;
@@ -134,7 +152,8 @@ OverviewWindow {
                 root.sourceWorkspaceId,
                 targetWorkspace,
                 targetIsTrailing,
-                targetMonitor);
+                targetMonitor,
+                placement);
         }
 
         onClicked: event => {

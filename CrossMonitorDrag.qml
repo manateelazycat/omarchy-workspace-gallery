@@ -42,7 +42,8 @@ Singleton {
         root.active = true;
     }
 
-    function publishTarget(surfaceMonitorName, workspaceMonitorName, workspaceId, isTrailing, x, y, w, h) {
+    function publishTarget(surfaceMonitorName, workspaceMonitorName, workspaceId, isTrailing,
+            x, y, w, h, workX, workY, workW, workH) {
         if (!root.active || workspaceId === undefined || workspaceId === null)
             return;
         const next = Object.assign({}, root.targets);
@@ -56,7 +57,11 @@ Singleton {
             x,
             y,
             w,
-            h
+            h,
+            workX,
+            workY,
+            workW,
+            workH
         };
         root.targets = next;
     }
