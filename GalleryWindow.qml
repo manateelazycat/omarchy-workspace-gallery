@@ -3,6 +3,7 @@ import "."
 import QtQuick
 import Quickshell.Hyprland
 import Quickshell.Wayland
+import Quickshell.Wayland._ToplevelManagement
 
 OverviewWindow {
     id: root

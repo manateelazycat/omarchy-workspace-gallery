@@ -4,6 +4,7 @@ import qs.Commons
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Wayland._ToplevelManagement
 import Quickshell.Hyprland
 import "ColorUtils.js" as ColorUtils
 
