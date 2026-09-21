@@ -4,7 +4,7 @@
   "name": "Workspace Gallery",
   "version": "0.3.2",
   "author": "ManateeLazyCat",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "description": "A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.",
   "keepLoaded": true,
   "kinds": ["panel"],

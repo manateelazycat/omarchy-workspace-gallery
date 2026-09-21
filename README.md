@@ -48,3 +48,9 @@ qmllint -I "${OMARCHY_PATH:-/usr/share/omarchy}/shell" \
 ## Credits
 
 The live preview, Hyprland data model, wallpaper integration, and drag-and-drop foundations are adapted from [Overview Workspaces](https://github.com/iamcheyan/omarchy-overview-workspaces) by HANCORE, licensed under MIT. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## License
+
+Omarchy Workspace Gallery is licensed under the GNU General Public License
+version 3.0 only (`GPL-3.0-only`). Vendored and adapted third-party portions
+retain their original MIT license; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

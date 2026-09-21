@@ -10,6 +10,7 @@ test("manifest identifies a panel-only Workspace Gallery plugin", () => {
   const manifest = JSON.parse(read("manifest.json"));
   assert.equal(manifest.id, "io.github.manateelazycat.workspace-gallery");
   assert.equal(manifest.name, "Workspace Gallery");
+  assert.equal(manifest.license, "GPL-3.0-only");
   assert.deepEqual(manifest.kinds, ["panel"]);
   assert.equal(manifest.entryPoints.panel, "Gallery.qml");
 });
@@ -116,5 +117,6 @@ test("plugin lifecycle never reloads Hyprland", () => {
 test("third-party origin and license are retained", () => {
   assert.match(read("THIRD_PARTY_NOTICES.md"), /Overview Workspaces/);
   assert.match(read("THIRD_PARTY_NOTICES.md"), /733355994c333f8ddf155030fc9f0cb2e07a32cb/);
-  assert.ok(fs.statSync(path.join(root, "LICENSE")).size > 0);
+  assert.match(read("LICENSE"), /GNU GENERAL PUBLIC LICENSE/);
+  assert.match(read("LICENSES/MIT.txt"), /Copyright \(c\) 2026 HANCORE/);
 });
