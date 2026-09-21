@@ -18,7 +18,7 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 - Swipe three fingers left or right while open to move continuously between
   workspaces; releasing commits the switch or springs back based on distance
   and velocity.
-- While the gallery is open, pinch inward with four fingers or press `Down` to
+- While the gallery is open, pinch inward with two fingers or press `Down` to
   compact all occupied workspaces into consecutive numeric slots. Workspace
   order and monitor assignment are preserved.
 - The top 20% of the screen shows every workspace as a live thumbnail.

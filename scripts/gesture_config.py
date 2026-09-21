@@ -45,11 +45,13 @@ hl.gesture({{
   }},
 }})
 hl.gesture({{
-  fingers = 4,
-  direction = "pinchin",
-  action = function()
-    hl.dispatch(hl.dsp.event("workspace-gallery-compact,trigger"))
-  end,
+  fingers = 2,
+  direction = "pinch",
+  action = {{
+    finish = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-compact,trigger"))
+    end,
+  }},
 }})
 {END}
 '''

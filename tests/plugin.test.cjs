@@ -48,12 +48,13 @@ test("Super+A toggles the gallery and arrow keys select workspaces", () => {
   assert.match(gallery, /event\.key === Qt\.Key_Right[\s\S]*galleryScope\.selectRelative\(1\)/);
 });
 
-test("Down and a four-finger pinch compact occupied workspaces", () => {
+test("Down and a two-finger pinch compact occupied workspaces", () => {
   const gestures = read("scripts/gesture_config.py");
   const gallery = read("Gallery.qml");
   const navigation = read("WorkspaceNavigation.qml");
 
-  assert.match(gestures, /fingers = 4,[\s\S]*direction = "pinchin"/);
+  assert.match(gestures, /fingers = 2,[\s\S]*direction = "pinch"/);
+  assert.match(gestures, /finish = function\(e\)[\s\S]*workspace-gallery-compact,trigger/);
   assert.match(gestures, /workspace-gallery-compact,trigger/);
   assert.match(gallery, /channel === "workspace-gallery-compact"[\s\S]*WorkspaceNavigation\.compactWorkspaces\(\)/);
   assert.match(gallery, /event\.key === Qt\.Key_Down[\s\S]*WorkspaceNavigation\.compactWorkspaces\(\)/);

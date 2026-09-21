@@ -58,6 +58,7 @@ Scope {
         const channel = parts[0];
         const phase = parts[1];
         if (channel === "workspace-gallery-compact") {
+            console.info("[WorkspaceGallery] compact gesture requested");
             if (phase === "trigger" && GlobalStates.overviewOpen)
                 WorkspaceNavigation.compactWorkspaces();
             return;
