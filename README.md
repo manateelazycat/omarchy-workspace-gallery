@@ -4,6 +4,11 @@ https://github.com/user-attachments/assets/f2a784c9-a5dc-433e-afa6-f3d038c70133
 
 A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.
 
+## Requirements
+
+- Omarchy Quattro with its built-in Quickshell and Hyprland Lua configuration.
+- No additional third-party binaries or network services are required at runtime.
+
 ## Interaction
 
 - Make a deliberate three-finger swipe up and release to open the gallery;
