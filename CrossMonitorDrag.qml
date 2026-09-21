@@ -16,8 +16,12 @@ Singleton {
     property string sourceMonitorName: ""
     property real pointerX: 0
     property real pointerY: 0
+    property int pointerRevision: 0
     property int generation: 0
     property var targets: ({})
+    property var windowTargets: ({})
+    property bool liveReordered: false
+    property string liveSwapTargetAddress: ""
 
     property real sourceWidth: 0
     property real sourceHeight: 0
@@ -39,6 +43,9 @@ Singleton {
         root.pointerX = px ?? 0;
         root.pointerY = py ?? 0;
         root.targets = ({});
+        root.windowTargets = ({});
+        root.liveReordered = false;
+        root.liveSwapTargetAddress = "";
         root.active = true;
     }
 
@@ -70,7 +77,31 @@ Singleton {
         if (root.active) {
             root.pointerX = gx;
             root.pointerY = gy;
+            root.pointerRevision += 1;
         }
+    }
+
+    function publishWindowTarget(key, address, workspaceId, x, y, w, h) {
+        if (!root.active || !key || !address || workspaceId < 1 || w <= 0 || h <= 0)
+            return;
+        const next = Object.assign({}, root.windowTargets);
+        next[key] = {
+            address: String(address),
+            workspaceId,
+            x,
+            y,
+            w,
+            h
+        };
+        root.windowTargets = next;
+    }
+
+    function removeWindowTarget(key) {
+        if (!key || !root.windowTargets[key])
+            return;
+        const next = Object.assign({}, root.windowTargets);
+        delete next[key];
+        root.windowTargets = next;
     }
 
     readonly property var hoveredTarget: {
@@ -81,6 +112,21 @@ Singleton {
             const target = root.targets[keys[i]];
             if (root.pointerX >= target.x && root.pointerX <= target.x + target.w
                 && root.pointerY >= target.y && root.pointerY <= target.y + target.h)
+                return target;
+        }
+        return null;
+    }
+
+    readonly property var hoveredWindowTarget: {
+        if (!root.active)
+            return null;
+        const keys = Object.keys(root.windowTargets);
+        for (let i = keys.length - 1; i >= 0; --i) {
+            const target = root.windowTargets[keys[i]];
+            if (target.address === root.windowAddress)
+                continue;
+            if (root.pointerX >= target.x && root.pointerX <= target.x + target.w
+                    && root.pointerY >= target.y && root.pointerY <= target.y + target.h)
                 return target;
         }
         return null;
@@ -97,8 +143,11 @@ Singleton {
         root.sourceWorkspaceId = -1;
         root.sourceMonitorName = "";
         root.compactPreview = false;
+        root.liveReordered = false;
+        root.liveSwapTargetAddress = "";
         root.generation += 1;
         root.previewGrab = null;
         root.targets = ({});
+        root.windowTargets = ({});
     }
 }

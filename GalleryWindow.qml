@@ -38,8 +38,7 @@ OverviewWindow {
     property real pressSceneY: 0
     property real pressLocalX: 0
     property real pressLocalY: 0
-    property bool liveReordered: false
-    property string liveSwapTargetAddress: ""
+    readonly property string windowDropTargetKey: `${root.galleryRoot.monitor?.name ?? ""}:${root.closeOnActivate ? "large" : "small"}:${root.sourceWorkspaceId}:${root.address}`
 
     function placementForTarget(dropTarget) {
         if (!dropTarget || dropTarget.w <= 0 || dropTarget.h <= 0
@@ -57,28 +56,23 @@ OverviewWindow {
         };
     }
 
-    function updateLiveLayout() {
-        const dropTarget = CrossMonitorDrag.hoveredTarget;
-        if (!dropTarget || dropTarget.id !== root.sourceWorkspaceId) {
-            root.liveSwapTargetAddress = "";
+    function publishWindowDropTarget() {
+        if (!CrossMonitorDrag.active || root.width <= 0 || root.height <= 0)
             return;
-        }
-        const placement = root.placementForTarget(dropTarget);
-        const result = WorkspaceNavigation.reorderWindowDrag(
+        const point = root.mapToItem(null, 0, 0);
+        CrossMonitorDrag.publishWindowTarget(
+            root.windowDropTargetKey,
             root.address,
             root.sourceWorkspaceId,
-            placement,
-            root.liveSwapTargetAddress);
-        root.liveSwapTargetAddress = result.address;
-        if (result.changed)
-            root.liveReordered = true;
+            root.galleryRoot.monitorOriginX + point.x,
+            root.galleryRoot.monitorOriginY + point.y,
+            root.width,
+            root.height);
     }
 
     function beginPointerDrag(pointerSceneX, pointerSceneY) {
         if (root.Drag.active)
             return;
-        root.liveReordered = false;
-        root.liveSwapTargetAddress = "";
         root.snapshotPreview();
         WorkspaceNavigation.beginWindowDrag(root.sourceWorkspaceId);
         CrossMonitorDrag.begin(
@@ -125,6 +119,20 @@ OverviewWindow {
         if (root.liveWindowData)
             root.cachedWindowData = root.liveWindowData;
     }
+    onXChanged: root.publishWindowDropTarget()
+    onYChanged: root.publishWindowDropTarget()
+    onWidthChanged: root.publishWindowDropTarget()
+    onHeightChanged: root.publishWindowDropTarget()
+
+    Connections {
+        target: CrossMonitorDrag
+        function onActiveChanged() {
+            if (CrossMonitorDrag.active)
+                root.publishWindowDropTarget();
+        }
+    }
+
+    Component.onDestruction: CrossMonitorDrag.removeWindowTarget(root.windowDropTargetKey)
 
     Drag.hotSpot.x: width / 2
     Drag.hotSpot.y: height / 2
@@ -155,7 +163,6 @@ OverviewWindow {
             CrossMonitorDrag.updatePointer(
                 root.galleryRoot.monitorOriginX + point.x,
                 root.galleryRoot.monitorOriginY + point.y);
-            root.updateLiveLayout();
         }
 
         onPressed: mouse => {
@@ -185,7 +192,7 @@ OverviewWindow {
             const targetMonitor = dropTarget?.workspaceMonitorName
                 ?? GlobalStates.overviewDraggingTargetMonitor;
             const placement = root.placementForTarget(dropTarget);
-            const layoutAlreadyCommitted = root.liveReordered;
+            const layoutAlreadyCommitted = CrossMonitorDrag.liveReordered;
             CrossMonitorDrag.end();
             root.pressed = false;
             root.Drag.active = false;
@@ -199,8 +206,6 @@ OverviewWindow {
                 targetMonitor,
                 placement,
                 layoutAlreadyCommitted);
-            root.liveReordered = false;
-            root.liveSwapTargetAddress = "";
         }
 
         onClicked: event => {

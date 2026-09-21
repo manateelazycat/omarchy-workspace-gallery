@@ -253,16 +253,6 @@ Singleton {
         return true;
     }
 
-    function reorderWindowDrag(windowAddress, workspaceId, placement, previousTargetAddress) {
-        const targetAddress = root.tiledWindowAt(workspaceId, windowAddress, placement);
-        if (!targetAddress || targetAddress === previousTargetAddress)
-            return { address: targetAddress, changed: false };
-        return {
-            address: targetAddress,
-            changed: root.swapTiledWindows(windowAddress, targetAddress, workspaceId, placement)
-        };
-    }
-
     function dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement) {
         const move = `hl.dispatch(hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" }))`;
         if (!placement || !Number.isFinite(placement.dropX) || !Number.isFinite(placement.dropY)) {

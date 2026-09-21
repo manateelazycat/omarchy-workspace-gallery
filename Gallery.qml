@@ -115,6 +115,29 @@ Scope {
         return screen?.name === galleryScope.focusedScreen?.name;
     }
 
+    function updateLiveWindowDrag() {
+        if (!CrossMonitorDrag.active)
+            return;
+        const target = CrossMonitorDrag.hoveredWindowTarget;
+        if (!target || target.workspaceId !== CrossMonitorDrag.sourceWorkspaceId) {
+            CrossMonitorDrag.liveSwapTargetAddress = "";
+            return;
+        }
+        if (target.address === CrossMonitorDrag.liveSwapTargetAddress)
+            return;
+        const changed = WorkspaceNavigation.swapTiledWindows(
+            CrossMonitorDrag.windowAddress,
+            target.address,
+            CrossMonitorDrag.sourceWorkspaceId,
+            {
+                restoreX: CrossMonitorDrag.pointerX,
+                restoreY: CrossMonitorDrag.pointerY
+            });
+        CrossMonitorDrag.liveSwapTargetAddress = target.address;
+        if (changed)
+            CrossMonitorDrag.liveReordered = true;
+    }
+
     Connections {
         target: GlobalStates
         function onOverviewOpenChanged() {
@@ -127,6 +150,13 @@ Scope {
             GlobalStates.overviewFocusedWorkspaceId = -1;
             galleryScope.lockedScreenName = "";
             GlobalStates.overviewAnchorMonitorName = "";
+        }
+    }
+
+    Connections {
+        target: CrossMonitorDrag
+        function onPointerRevisionChanged() {
+            galleryScope.updateLiveWindowDrag();
         }
     }
 

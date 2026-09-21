@@ -89,19 +89,25 @@ test("drop coordinates are mapped into the real workspace before tiled insertion
 });
 
 test("same-workspace drags reorder tiled windows before release", () => {
+  const gallery = read("Gallery.qml");
   const galleryWindow = read("GalleryWindow.qml");
   const navigation = read("WorkspaceNavigation.qml");
+  const dragBridge = read("CrossMonitorDrag.qml");
   assert.match(navigation, /function tiledWindowAt\(workspaceId, windowAddress, placement\)/);
   assert.match(navigation, /dropX >= x && dropX <= x \+ width/);
-  assert.match(navigation, /function reorderWindowDrag\(windowAddress, workspaceId, placement, previousTargetAddress\)/);
   assert.match(navigation, /hl\.dsp\.focus\(\{ window = "address:\$\{windowAddress\}" \}\)/);
   assert.match(navigation, /hl\.dsp\.window\.swap\(\{ target = "address:\$\{targetAddress\}" \}\)/);
   assert.match(navigation, /hl\.timer\(function\(\)[\s\S]*hl\.dsp\.window\.swap/);
   assert.match(navigation, /timeout = 1, type = "oneshot"/);
   assert.match(navigation, /hl\.dsp\.cursor\.move\(\{ x = \$\{restoreX\}, y = \$\{restoreY\} \}\)/);
-  assert.match(galleryWindow, /CrossMonitorDrag\.updatePointer[\s\S]*root\.updateLiveLayout\(\)/);
-  assert.match(galleryWindow, /dropTarget\.id !== root\.sourceWorkspaceId/);
-  assert.match(galleryWindow, /layoutAlreadyCommitted/);
+  assert.match(dragBridge, /property var windowTargets: \(\{\}\)/);
+  assert.match(dragBridge, /readonly property var hoveredWindowTarget/);
+  assert.match(galleryWindow, /function publishWindowDropTarget\(\)/);
+  assert.match(galleryWindow, /CrossMonitorDrag\.publishWindowTarget/);
+  assert.match(gallery, /function updateLiveWindowDrag\(\)/);
+  assert.match(gallery, /target\.workspaceId !== CrossMonitorDrag\.sourceWorkspaceId/);
+  assert.match(gallery, /function onPointerRevisionChanged\(\)/);
+  assert.match(galleryWindow, /const layoutAlreadyCommitted = CrossMonitorDrag\.liveReordered/);
 });
 
 test("a stationary click does not start the window drag animation", () => {
