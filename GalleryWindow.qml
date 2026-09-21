@@ -1,8 +1,8 @@
 pragma ComponentBehavior: Bound
 import "."
 import QtQuick
-import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Wayland
 
 OverviewWindow {
     id: root
