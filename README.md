@@ -6,7 +6,9 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 
 - Swipe three fingers up to open the gallery.
 - Swipe three fingers down to close it.
-- Swipe three fingers left or right while open to select another workspace.
+- Swipe three fingers left or right while open to move continuously between
+  workspaces; releasing commits the switch or springs back based on distance
+  and velocity.
 - The top 20% of the screen shows every workspace as a live thumbnail.
 - The bottom 80% shows the selected workspace at a larger scale.
 - Drag a window between the top thumbnails and the large preview to move it.

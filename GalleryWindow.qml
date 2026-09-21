@@ -17,6 +17,7 @@ OverviewWindow {
     required property real previewWidth
     required property real previewHeight
     required property bool closeOnActivate
+    property bool interactionEnabled: true
 
     signal activated(var windowData)
 
@@ -71,6 +72,7 @@ OverviewWindow {
         cursorShape: Qt.PointingHandCursor
         drag.target: parent
         drag.threshold: 8
+        enabled: root.interactionEnabled
 
         onEntered: root.hovered = true
         onExited: root.hovered = false

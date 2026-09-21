@@ -27,17 +27,18 @@ hl.gesture({{
 }})
 hl.gesture({{
   fingers = 3,
-  direction = "left",
-  action = function()
-    hl.dispatch(hl.dsp.global("quickshell:workspaceGalleryNext"))
-  end,
-}})
-hl.gesture({{
-  fingers = 3,
-  direction = "right",
-  action = function()
-    hl.dispatch(hl.dsp.global("quickshell:workspaceGalleryPrevious"))
-  end,
+  direction = "horizontal",
+  action = {{
+    start = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-swipe,start," .. e.delta.x .. "," .. e.time_ms))
+    end,
+    update = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-swipe,update," .. e.delta.x .. "," .. e.time_ms))
+    end,
+    finish = function(e)
+      hl.dispatch(hl.dsp.event("workspace-gallery-swipe,finish," .. tostring(e.cancelled) .. "," .. e.time_ms))
+    end,
+  }},
 }})
 {END}
 '''

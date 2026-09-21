@@ -9,6 +9,11 @@ pragma ComponentBehavior: Bound
 
 Singleton {
     id: root
+    signal gallerySwipeStarted(real deltaX, real timestamp)
+    signal gallerySwipeUpdated(real deltaX, real timestamp)
+    signal gallerySwipeFinished(bool cancelled, real timestamp)
+    signal galleryStepRequested(int delta)
+
     property bool barOpen: true
     property bool clipboardOpen: false
     property bool osdBrightnessOpen: false

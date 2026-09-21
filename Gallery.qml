@@ -11,6 +11,7 @@ Scope {
     id: galleryScope
 
     property string lockedScreenName: ""
+    property real outsideSwipeDistance: 0
     property var focusedScreen: Quickshell.screens.find(
         screen => screen.name === (galleryScope.lockedScreenName || Hyprland.focusedMonitor?.name))
         ?? Quickshell.screens[0]
@@ -29,6 +30,7 @@ Scope {
     }
 
     function close() {
+        GlobalStates.gallerySwipeFinished(true, 0);
         GlobalStates.overviewOpen = false;
     }
 
@@ -44,7 +46,40 @@ Scope {
             Hyprland.dispatch(`hl.dsp.focus({ workspace = "e${delta > 0 ? "+1" : "-1"}" })`);
             return;
         }
-        WorkspaceNavigation.navigateByIndex(delta, true);
+        GlobalStates.galleryStepRequested(delta);
+    }
+
+    function handleSwipeEvent(data) {
+        const parts = String(data ?? "").split(",");
+        if (parts[0] !== "workspace-gallery-swipe" || parts.length < 2)
+            return;
+
+        const phase = parts[1];
+        if (phase === "start") {
+            galleryScope.outsideSwipeDistance = 0;
+            const delta = Number(parts[2] ?? 0);
+            const timestamp = Number(parts[3] ?? 0);
+            if (GlobalStates.overviewOpen)
+                GlobalStates.gallerySwipeStarted(delta, timestamp);
+            else
+                galleryScope.outsideSwipeDistance = delta;
+        } else if (phase === "update") {
+            const delta = Number(parts[2] ?? 0);
+            const timestamp = Number(parts[3] ?? 0);
+            if (GlobalStates.overviewOpen)
+                GlobalStates.gallerySwipeUpdated(delta, timestamp);
+            else
+                galleryScope.outsideSwipeDistance += delta;
+        } else if (phase === "finish") {
+            const cancelled = parts[2] === "true";
+            const timestamp = Number(parts[3] ?? 0);
+            if (GlobalStates.overviewOpen) {
+                GlobalStates.gallerySwipeFinished(cancelled, timestamp);
+            } else if (!cancelled && Math.abs(galleryScope.outsideSwipeDistance) >= 55) {
+                galleryScope.selectRelative(galleryScope.outsideSwipeDistance < 0 ? 1 : -1);
+            }
+            galleryScope.outsideSwipeDistance = 0;
+        }
     }
 
     function activateSelection() {
@@ -68,6 +103,14 @@ Scope {
             GlobalStates.overviewFocusedWorkspaceId = -1;
             galleryScope.lockedScreenName = "";
             GlobalStates.overviewAnchorMonitorName = "";
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (event.name === "custom")
+                galleryScope.handleSwipeEvent(event.data);
         }
     }
 

@@ -565,7 +565,7 @@ Singleton {
 
         function onRawEvent(event) {
             // Layer/screencast events don't change clients/workspaces/monitors.
-            if (["openlayer", "closelayer", "screencast"].includes(event.name)) return;
+            if (["openlayer", "closelayer", "screencast", "custom"].includes(event.name)) return;
             // activeWindow is cheap (tiny JSON) and feeds focusedClientForWorkspace,
             // so refresh it immediately for responsiveness; coalesce the rest.
             if (["activewindow", "activewindowv2", "windowtitlev2", "focusedmon", "focusedmonv2"].includes(event.name)) {

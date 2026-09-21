@@ -38,6 +38,10 @@ Item {
     readonly property var selectedEntry: root.entries.find(entry => entry.id === root.selectedWorkspaceId)
         ?? root.entries[0]
         ?? null
+    readonly property int selectedIndex: Math.max(0,
+        root.entries.findIndex(entry => entry.id === root.selectedWorkspaceId))
+    readonly property bool ownsGesture: (root.monitor?.name ?? "")
+        === GlobalStates.overviewAnchorMonitorName
 
     readonly property real topHeight: height * 0.20
     readonly property real bottomY: topHeight
@@ -51,6 +55,16 @@ Item {
     readonly property real bottomCardY: bottomY + 12
     readonly property real bottomCardWidth: width - bottomMargin * 2
     readonly property real bottomCardHeight: Math.max(1, height - bottomCardY - bottomMargin)
+    readonly property real pageGap: 24
+    readonly property real pageSpan: bottomCardWidth + pageGap
+    property real swipeOffset: 0
+    property bool swipeActive: false
+    property bool swipeSettling: false
+    property real swipeVelocity: 0
+    property real lastSwipeTimestamp: 0
+    property int swipeStartIndex: -1
+    property int settlementIndex: -1
+    readonly property bool workspaceInteractionEnabled: !root.swipeActive && !root.swipeSettling
 
     function usableLogicalWidth(mon) {
         const transform = mon?.transform ?? 0;
@@ -104,6 +118,81 @@ Item {
         root.selectWorkspace(root.entries[index].id);
     }
 
+    function beginSwipe(deltaX, timestamp) {
+        if (!root.ownsGesture || root.swipeSettling || root.entries.length === 0)
+            return;
+        settleAnimation.stop();
+        root.swipeActive = true;
+        root.swipeStartIndex = root.selectedIndex;
+        root.swipeOffset = 0;
+        root.swipeVelocity = 0;
+        root.lastSwipeTimestamp = timestamp;
+        root.applySwipeDelta(deltaX, timestamp);
+    }
+
+    function applySwipeDelta(deltaX, timestamp) {
+        if (!root.ownsGesture || !root.swipeActive || root.swipeSettling)
+            return;
+        const scaledDelta = Number(deltaX) * 3.2;
+        const elapsed = Math.max(1, Number(timestamp) - root.lastSwipeTimestamp);
+        const instantaneousVelocity = scaledDelta / elapsed;
+        root.swipeVelocity = root.swipeVelocity * 0.72 + instantaneousVelocity * 0.28;
+        root.lastSwipeTimestamp = Number(timestamp);
+
+        let nextOffset = root.swipeOffset + scaledDelta;
+        const movingToPrevious = nextOffset > 0;
+        const targetIndex = root.swipeStartIndex + (movingToPrevious ? -1 : 1);
+        if (targetIndex < 0 || targetIndex >= root.entries.length)
+            nextOffset = nextOffset * 0.28;
+        root.swipeOffset = Math.max(-root.pageSpan * 1.04,
+            Math.min(root.pageSpan * 1.04, nextOffset));
+    }
+
+    function endSwipe(cancelled) {
+        if (!root.ownsGesture || !root.swipeActive)
+            return;
+        root.swipeActive = false;
+        const direction = root.swipeOffset < 0 ? 1 : -1;
+        const targetIndex = root.swipeStartIndex + direction;
+        const targetExists = targetIndex >= 0 && targetIndex < root.entries.length;
+        const passedDistance = Math.abs(root.swipeOffset) >= root.bottomCardWidth * 0.22;
+        const passedVelocity = Math.abs(root.swipeVelocity) >= 0.58
+            && Math.sign(root.swipeVelocity) === Math.sign(root.swipeOffset);
+        const commit = !cancelled && targetExists && (passedDistance || passedVelocity);
+
+        root.settlementIndex = commit ? targetIndex : root.swipeStartIndex;
+        settleAnimation.to = commit ? -direction * root.pageSpan : 0;
+        settleAnimation.duration = commit ? 230 : 200;
+        root.swipeSettling = true;
+        settleAnimation.start();
+    }
+
+    function requestStep(delta) {
+        if (!root.ownsGesture || root.swipeActive || root.swipeSettling || root.entries.length === 0)
+            return;
+        const targetIndex = root.selectedIndex + (delta > 0 ? 1 : -1);
+        if (targetIndex < 0 || targetIndex >= root.entries.length)
+            return;
+        root.swipeStartIndex = root.selectedIndex;
+        root.settlementIndex = targetIndex;
+        root.swipeOffset = 0;
+        settleAnimation.to = delta > 0 ? -root.pageSpan : root.pageSpan;
+        settleAnimation.duration = 260;
+        root.swipeSettling = true;
+        settleAnimation.start();
+    }
+
+    function finishSettlement() {
+        if (root.settlementIndex >= 0 && root.settlementIndex < root.entries.length
+                && root.settlementIndex !== root.selectedIndex)
+            root.selectWorkspace(root.entries[root.settlementIndex].id);
+        root.swipeOffset = 0;
+        root.swipeVelocity = 0;
+        root.swipeStartIndex = -1;
+        root.settlementIndex = -1;
+        root.swipeSettling = false;
+    }
+
     function activateWindow(windowData) {
         WorkspaceNavigation.focusWindow(windowData);
         GlobalStates.overviewOpen = false;
@@ -128,6 +217,31 @@ Item {
             if (fallback)
                 root.selectWorkspace(fallback.id);
         }
+    }
+
+    Connections {
+        target: GlobalStates
+        function onGallerySwipeStarted(deltaX, timestamp) {
+            root.beginSwipe(deltaX, timestamp);
+        }
+        function onGallerySwipeUpdated(deltaX, timestamp) {
+            root.applySwipeDelta(deltaX, timestamp);
+        }
+        function onGallerySwipeFinished(cancelled, timestamp) {
+            void timestamp;
+            root.endSwipe(cancelled);
+        }
+        function onGalleryStepRequested(delta) {
+            root.requestStep(delta);
+        }
+    }
+
+    NumberAnimation {
+        id: settleAnimation
+        target: root
+        property: "swipeOffset"
+        easing.type: Easing.OutCubic
+        onFinished: root.finishSettlement()
     }
 
     Rectangle {
@@ -199,6 +313,7 @@ Item {
                     previewWidth: topCard.width
                     previewHeight: topCard.height
                     closeOnActivate: false
+                    interactionEnabled: root.workspaceInteractionEnabled
                     onActivated: root.selectWorkspace(topCard.modelData.id)
                 }
             }
@@ -252,100 +367,35 @@ Item {
         }
     }
 
-    Rectangle {
-        id: bottomCard
+    Item {
+        id: bottomViewport
         x: root.bottomCardX
         y: root.bottomCardY
         width: root.bottomCardWidth
         height: root.bottomCardHeight
-        radius: 12
         clip: true
-        color: Appearance.colors.colSurfaceContainerLow
-        border.width: 2
-        border.color: TuiStyle.accent
-
-        Image {
-            anchors.fill: parent
-            source: root.wallpaperUrl
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: false
-            cache: true
-            opacity: root.selectedEntry?.isTrailingEmpty ? 0.58 : 0.9
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: bottomDrop.containsDrag
-                ? ColorUtils.transparentize(TuiStyle.accent, 0.76)
-                : "transparent"
-        }
 
         Repeater {
-            model: ScriptModel {
-                values: root.selectedEntry
-                    ? root.windowAddressesForWorkspace(root.selectedEntry.id)
-                    : []
-            }
-            delegate: GalleryWindow {
-                required property string modelData
-                address: modelData
-                galleryRoot: root
-                screen: root.screen
-                sourceWorkspaceId: root.selectedEntry?.id ?? -1
-                previewX: 0
-                previewY: 0
-                previewWidth: bottomCard.width
-                previewHeight: bottomCard.height
-                closeOnActivate: true
-                onActivated: windowData => root.activateWindow(windowData)
-            }
-        }
+            model: root.entries
+            delegate: Loader {
+                id: pageLoader
+                required property var modelData
+                required property int index
+                readonly property int anchorIndex: root.swipeStartIndex >= 0
+                    ? root.swipeStartIndex : root.selectedIndex
+                x: (index - anchorIndex) * root.pageSpan + root.swipeOffset
+                width: bottomViewport.width
+                height: bottomViewport.height
+                active: Math.abs(index - anchorIndex) <= 1
+                asynchronous: false
 
-        Rectangle {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: 14
-            width: bottomLabel.implicitWidth + 18
-            height: bottomLabel.implicitHeight + 10
-            radius: height / 2
-            color: ColorUtils.transparentize(TuiStyle.bg, 0.16)
-            z: 80
-
-            StyledText {
-                id: bottomLabel
-                anchors.centerIn: parent
-                text: root.selectedEntry?.isTrailingEmpty
-                    ? "New workspace"
-                    : `Workspace ${root.selectedEntry?.id ?? ""}`
-                color: TuiStyle.fg
-                font.pixelSize: Appearance.font.pixelSize.normal
-                font.weight: Font.DemiBold
-            }
-        }
-
-        DropArea {
-            id: bottomDrop
-            anchors.fill: parent
-            z: 90
-            onEntered: {
-                if (!root.selectedEntry)
-                    return;
-                WorkspaceNavigation.setDragTarget(
-                    root.selectedEntry.id,
-                    root.selectedEntry.isTrailingEmpty ?? false,
-                    root.selectedEntry.monitorName ?? "");
-            }
-            onExited: {
-                if (root.selectedEntry)
-                    WorkspaceNavigation.clearDragTarget(root.selectedEntry.id);
-            }
-        }
-
-        Connections {
-            target: CrossMonitorDrag
-            function onActiveChanged() {
-                if (CrossMonitorDrag.active && root.selectedEntry)
-                    root.registerDropTarget(bottomCard, root.selectedEntry);
+                sourceComponent: GalleryWorkspacePage {
+                    entry: pageLoader.modelData
+                    galleryRoot: root
+                    screen: root.screen
+                    wallpaperUrl: root.wallpaperUrl
+                    interactionEnabled: root.workspaceInteractionEnabled
+                }
             }
         }
     }
