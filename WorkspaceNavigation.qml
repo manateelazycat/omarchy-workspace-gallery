@@ -203,6 +203,31 @@ Singleton {
         }
     }
 
+    function tiledWindowAt(workspaceId, windowAddress, placement) {
+        if (!placement || !Number.isFinite(placement.dropX) || !Number.isFinite(placement.dropY))
+            return "";
+
+        const sourceAddress = ServiceManager.workspace.normalizeAddress(windowAddress);
+        const dropX = Number(placement.dropX);
+        const dropY = Number(placement.dropY);
+        const clients = ServiceManager.workspace.hyprlandClientsForWorkspace(workspaceId);
+        for (let i = clients.length - 1; i >= 0; --i) {
+            const client = clients[i];
+            const address = ServiceManager.workspace.normalizeAddress(client?.address);
+            if (!client?.mapped || client?.hidden || client?.floating || !address || address === sourceAddress)
+                continue;
+            const x = Number(client.at?.[0]);
+            const y = Number(client.at?.[1]);
+            const width = Number(client.size?.[0]);
+            const height = Number(client.size?.[1]);
+            if (![x, y, width, height].every(Number.isFinite))
+                continue;
+            if (dropX >= x && dropX <= x + width && dropY >= y && dropY <= y + height)
+                return address;
+        }
+        return "";
+    }
+
     function dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement) {
         const move = `hl.dispatch(hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" }))`;
         if (!placement || !Number.isFinite(placement.dropX) || !Number.isFinite(placement.dropY)) {
@@ -217,6 +242,20 @@ Singleton {
         const restoreX = Math.round(placement.restoreX);
         const restoreY = Math.round(placement.restoreY);
         if (targetWorkspace === currentWorkspaceId) {
+            const swapTargetAddress = root.tiledWindowAt(targetWorkspace, windowAddress, placement);
+            if (swapTargetAddress.length > 0) {
+                const activeWorkspaceId = ServiceManager.workspace.activeWorkspace?.id ?? currentWorkspaceId;
+                const restoreWorkspace = activeWorkspaceId !== currentWorkspaceId
+                    ? `hl.dispatch(hl.dsp.focus({ workspace = ${activeWorkspaceId} }))`
+                    : "";
+                Hyprland.dispatch(`function()
+                    hl.dispatch(hl.dsp.focus({ window = "address:${windowAddress}" }))
+                    hl.dispatch(hl.dsp.window.swap({ target = "address:${swapTargetAddress}" }))
+                    ${restoreWorkspace}
+                end`);
+                return true;
+            }
+
             Hyprland.dispatch(`function()
                 hl.dispatch(hl.dsp.window.move({ workspace = "special:workspace-gallery-staging", follow = false, window = "address:${windowAddress}" }))
                 hl.timer(function()

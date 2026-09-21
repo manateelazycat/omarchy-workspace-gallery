@@ -88,6 +88,14 @@ test("drop coordinates are mapped into the real workspace before tiled insertion
   assert.match(navigation, /x = \$\{restoreX\}, y = \$\{restoreY\}/);
 });
 
+test("same-workspace drops swap with the tiled window under the pointer", () => {
+  const navigation = read("WorkspaceNavigation.qml");
+  assert.match(navigation, /function tiledWindowAt\(workspaceId, windowAddress, placement\)/);
+  assert.match(navigation, /dropX >= x && dropX <= x \+ width/);
+  assert.match(navigation, /hl\.dsp\.focus\(\{ window = "address:\$\{windowAddress\}" \}\)/);
+  assert.match(navigation, /hl\.dsp\.window\.swap\(\{ target = "address:\$\{swapTargetAddress\}" \}\)/);
+});
+
 test("a stationary click does not start the window drag animation", () => {
   const source = read("GalleryWindow.qml");
   const pressed = source.slice(source.indexOf("onPressed:"), source.indexOf("onReleased:"));

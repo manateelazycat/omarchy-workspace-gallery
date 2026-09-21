@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.manateelazycat.workspace-gallery",
   "name": "Workspace Gallery",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "author": "ManateeLazyCat",
   "license": "GPL-3.0-only",
   "description": "A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.",
