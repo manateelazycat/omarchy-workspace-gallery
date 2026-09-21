@@ -351,7 +351,7 @@ Item {
 
             Rectangle {
                 anchors.fill: parent
-                radius: topCard.radius
+                radius: 0
                 color: "transparent"
                 border.width: topCard.modelData.id === root.highlightedWorkspaceId ? 4 : 1
                 border.color: topCard.modelData.id === root.highlightedWorkspaceId

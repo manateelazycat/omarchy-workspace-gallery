@@ -54,6 +54,7 @@ test("workspace labels are hidden and swipe target drives the top highlight", ()
   assert.doesNotMatch(page, /`Workspace \$\{page\.entry/);
   assert.match(gallery, /highlightedWorkspaceId/);
   assert.match(gallery, /border\.width: topCard\.modelData\.id === root\.highlightedWorkspaceId \? 4 : 1/);
+  assert.match(gallery, /anchors\.fill: parent\s+radius: 0\s+color: "transparent"/);
   assert.match(gallery, /z: 100/);
 });
 
