@@ -85,6 +85,17 @@ test("drop coordinates are mapped into the real workspace before tiled insertion
   assert.match(navigation, /x = \$\{restoreX\}, y = \$\{restoreY\}/);
 });
 
+test("a stationary click does not start the window drag animation", () => {
+  const source = read("GalleryWindow.qml");
+  const pressed = source.slice(source.indexOf("onPressed:"), source.indexOf("onReleased:"));
+  const moved = source.slice(source.indexOf("onPositionChanged:"), source.indexOf("onPressed:"));
+  assert.doesNotMatch(pressed, /CrossMonitorDrag\.begin/);
+  assert.doesNotMatch(pressed, /root\.Drag\.active = true/);
+  assert.match(moved, /dragArea\.drag\.threshold/);
+  assert.match(moved, /root\.beginPointerDrag/);
+  assert.match(source, /if \(!root\.Drag\.active\) \{\s+root\.pressed = false;\s+return;/);
+});
+
 test("high-frequency swipe events do not refresh the workspace data model", () => {
   assert.match(read("HyprlandData.qml"), /"custom"\]\.includes\(event\.name\)/);
 });

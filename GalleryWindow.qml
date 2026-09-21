@@ -36,6 +36,31 @@ OverviewWindow {
     property bool movedDuringPress: false
     property real pressSceneX: 0
     property real pressSceneY: 0
+    property real pressLocalX: 0
+    property real pressLocalY: 0
+
+    function beginPointerDrag(pointerSceneX, pointerSceneY) {
+        if (root.Drag.active)
+            return;
+        root.snapshotPreview();
+        WorkspaceNavigation.beginWindowDrag(root.sourceWorkspaceId);
+        CrossMonitorDrag.begin(
+            root.address,
+            root.sourceWorkspaceId,
+            root.galleryRoot.monitor?.name ?? "",
+            root.width,
+            root.height,
+            root.galleryRoot.monitorOriginX + pointerSceneX,
+            root.galleryRoot.monitorOriginY + pointerSceneY,
+            root.closeOnActivate);
+        const generation = CrossMonitorDrag.generation;
+        root.grabPreview(result => CrossMonitorDrag.setPreview(result, generation));
+        root.movedDuringPress = true;
+        root.Drag.active = true;
+        root.Drag.source = root;
+        root.Drag.hotSpot.x = root.pressLocalX;
+        root.Drag.hotSpot.y = root.pressLocalY;
+    }
 
     toplevel: root.modelToplevel
     captureActive: GlobalStates.overviewOpen
@@ -84,43 +109,36 @@ OverviewWindow {
             if (!root.pressed)
                 return;
             const point = dragArea.mapToItem(null, mouse.x, mouse.y);
-            if (Math.abs(point.x - root.pressSceneX) > 8 || Math.abs(point.y - root.pressSceneY) > 8)
-                root.movedDuringPress = true;
+            if (!root.Drag.active
+                    && (Math.abs(point.x - root.pressSceneX) > dragArea.drag.threshold
+                        || Math.abs(point.y - root.pressSceneY) > dragArea.drag.threshold))
+                root.beginPointerDrag(point.x, point.y);
+            if (!root.Drag.active)
+                return;
             CrossMonitorDrag.updatePointer(
                 root.galleryRoot.monitorOriginX + point.x,
-                root.galleryRoot.monitorOriginY + point.y,
-                root.closeOnActivate);
+                root.galleryRoot.monitorOriginY + point.y);
         }
 
         onPressed: mouse => {
             if (mouse.button !== Qt.LeftButton)
                 return;
-            root.snapshotPreview();
-            WorkspaceNavigation.beginWindowDrag(root.sourceWorkspaceId);
             const point = dragArea.mapToItem(null, mouse.x, mouse.y);
             root.movedDuringPress = false;
             root.pressSceneX = point.x;
             root.pressSceneY = point.y;
-            CrossMonitorDrag.begin(
-                root.address,
-                root.sourceWorkspaceId,
-                root.galleryRoot.monitor?.name ?? "",
-                root.width,
-                root.height,
-                root.galleryRoot.monitorOriginX + point.x,
-                root.galleryRoot.monitorOriginY + point.y);
-            const generation = CrossMonitorDrag.generation;
-            root.grabPreview(result => CrossMonitorDrag.setPreview(result, generation));
+            root.pressLocalX = mouse.x;
+            root.pressLocalY = mouse.y;
             root.pressed = true;
-            root.Drag.active = true;
-            root.Drag.source = root;
-            root.Drag.hotSpot.x = mouse.x;
-            root.Drag.hotSpot.y = mouse.y;
         }
 
         onReleased: {
             if (!root.pressed)
                 return;
+            if (!root.Drag.active) {
+                root.pressed = false;
+                return;
+            }
             const dropTarget = CrossMonitorDrag.hoveredTarget;
             const targetWorkspace = dropTarget?.id
                 ?? GlobalStates.overviewDraggingTargetWorkspace;
