@@ -182,7 +182,7 @@ Scope {
 
                     Keys.onPressed: event => {
                         if (event.key === Qt.Key_Escape) {
-                            galleryScope.close();
+                            galleryScope.activateSelection();
                             event.accepted = true;
                         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_H) {
                             galleryScope.selectRelative(-1);

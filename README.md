@@ -14,7 +14,8 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 - The bottom 80% shows the selected workspace at a larger scale.
 - Drag a window between the top thumbnails and the large preview to move it.
 - Click a top workspace to select it; click a window in the large preview to focus it and leave the gallery.
-- Press `Esc` to close the gallery. Arrow keys and `H`/`L` select workspaces.
+- Press `Esc` to focus the selected workspace and close the gallery. Arrow
+  keys and `H`/`L` select workspaces.
 
 Outside the gallery, three-finger horizontal swipes continue switching Hyprland workspaces.
 

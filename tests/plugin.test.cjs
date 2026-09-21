@@ -96,6 +96,12 @@ test("a stationary click does not start the window drag animation", () => {
   assert.match(source, /if \(!root\.Drag\.active\) \{\s+root\.pressed = false;\s+return;/);
 });
 
+test("Escape commits the selected workspace before closing the gallery", () => {
+  const source = read("Gallery.qml");
+  assert.match(source, /event\.key === Qt\.Key_Escape\) \{\s+galleryScope\.activateSelection\(\);/);
+  assert.match(source, /function activateSelection\(\) \{\s+WorkspaceNavigation\.commitSelectedWorkspace\(\);\s+galleryScope\.close\(\);/);
+});
+
 test("high-frequency swipe events do not refresh the workspace data model", () => {
   assert.match(read("HyprlandData.qml"), /"custom"\]\.includes\(event\.name\)/);
 });
