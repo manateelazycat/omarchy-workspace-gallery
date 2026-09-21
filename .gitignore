@@ -1,4 +1,5 @@
 .qmllint.ini.user
 node_modules/
+__pycache__/
+*.pyc
 *.log
-
