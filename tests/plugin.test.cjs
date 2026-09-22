@@ -48,6 +48,19 @@ test("Super+A toggles the gallery and arrow keys select workspaces", () => {
   assert.match(gallery, /event\.key === Qt\.Key_Right[\s\S]*galleryScope\.selectRelative\(1\)/);
 });
 
+test("all gallery close paths use a progressive exit animation", () => {
+  const gallery = read("Gallery.qml");
+  const widget = read("GalleryWidget.qml");
+  assert.match(gallery, /function close\(commitSelection = false\)/);
+  assert.match(gallery, /id: closeAnimation[\s\S]*property: "revealProgress"[\s\S]*duration: 220/);
+  assert.match(gallery, /visible: GlobalStates\.overviewOpen \|\| galleryScope\.closing/);
+  assert.match(gallery, /opacity: galleryScope\.revealProgress/);
+  assert.match(gallery, /y: \(1 - galleryScope\.revealProgress\) \* 28/);
+  assert.match(gallery, /galleryScope\.close\(true\)/);
+  assert.match(widget, /signal closeRequested\(bool commitSelection\)/);
+  assert.match(widget, /root\.closeRequested\(false\)/);
+});
+
 test("Super+W closes the latest window from the workspace selected in the gallery", () => {
   const config = read("scripts/gesture_config.py");
   const gallery = read("Gallery.qml");
@@ -158,11 +171,12 @@ test("empty workspace cards leave left-to-right at half-duration intervals", () 
   assert.equal(animation.duration, 1240);
 });
 
-test("the animated top-window layer remains above the card click target", () => {
+test("top workspace taps coexist with window dragging", () => {
   const gallery = read("GalleryWidget.qml");
   assert.match(gallery, /id: topWindowLayer[\s\S]*z: 20[\s\S]*Repeater/);
-  assert.match(gallery, /id: topWindowLayer[\s\S]*GalleryWindow[\s\S]*MouseArea \{[\s\S]*z: 10/);
-  const topWindowLayer = gallery.slice(gallery.indexOf("id: topWindowLayer"), gallery.indexOf("MouseArea {", gallery.indexOf("id: topWindowLayer")));
+  assert.match(gallery, /id: topWindowLayer[\s\S]*GalleryWindow[\s\S]*TapHandler \{/);
+  assert.match(gallery, /gesturePolicy: TapHandler\.DragThreshold/);
+  const topWindowLayer = gallery.slice(gallery.indexOf("id: topWindowLayer"), gallery.indexOf("TapHandler {", gallery.indexOf("id: topWindowLayer")));
   assert.doesNotMatch(topWindowLayer, /overviewCompactionSyncing|Behavior on opacity/);
 });
 
@@ -174,6 +188,19 @@ test("bottom gallery uses a follow-finger workspace track", () => {
   assert.match(source, /function endSwipe/);
   assert.match(source, /NumberAnimation\s*\{/);
   assert.match(source, /GalleryWorkspacePage\s*\{/);
+});
+
+test("clicking a top workspace animates the large preview in its direction", () => {
+  const source = read("GalleryWidget.qml");
+  assert.match(source, /function animateToWorkspace\(workspaceId\)/);
+  assert.match(source, /root\.clickedWorkspaceId = workspaceId/);
+  assert.match(source, /settleAnimation\.to = \(root\.selectedIndex - targetIndex\) \* root\.pageSpan/);
+  assert.match(source, /settleAnimation\.duration = Math\.min\(800, 260 \+ \(distance - 1\) \* 125\)/);
+  assert.match(source, /root\.settleEasingType = Easing\.InOutCubic/);
+  assert.match(source, /inClickTravelRange[\s\S]*Math\.min\(anchorIndex, root\.settlementIndex\)/);
+  assert.doesNotMatch(source, /clickedWorkspaceStepTimer/);
+  assert.match(source, /onTapped: root\.animateToWorkspace\(topCard\.modelData\.id\)/);
+  assert.match(source, /onActivated: root\.animateToWorkspace\(topCard\.modelData\.id\)/);
 });
 
 test("a lone window has vertical breathing room in the large preview", () => {
@@ -301,7 +328,8 @@ test("a stationary click does not start the window drag animation", () => {
 test("Escape commits the selected workspace before closing the gallery", () => {
   const source = read("Gallery.qml");
   assert.match(source, /event\.key === Qt\.Key_Escape\) \{\s+galleryScope\.activateSelection\(\);/);
-  assert.match(source, /function activateSelection\(\) \{\s+WorkspaceNavigation\.commitSelectedWorkspace\(\);\s+galleryScope\.close\(\);/);
+  assert.match(source, /function activateSelection\(\) \{\s+galleryScope\.close\(true\);/);
+  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose\)\s+WorkspaceNavigation\.commitSelectedWorkspace\(\);/);
 });
 
 test("high-frequency swipe events do not refresh the workspace data model", () => {

@@ -11,6 +11,8 @@ import "ColorUtils.js" as ColorUtils
 Item {
     id: root
 
+    signal closeRequested(bool commitSelection)
+
     required property var screen
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
     readonly property var monitorData: ServiceManager.workspace.monitors.find(m => m.id === root.monitor?.id)
@@ -64,6 +66,8 @@ Item {
     property real lastSwipeTimestamp: 0
     property int swipeStartIndex: -1
     property int settlementIndex: -1
+    property int clickedWorkspaceId: -1
+    property int settleEasingType: Easing.OutCubic
     property var compactionHandoffGrab: null
     property url compactionHandoffUrl: ""
     readonly property bool workspaceInteractionEnabled: !root.swipeActive
@@ -192,6 +196,34 @@ Item {
             topList.positionViewAtIndex(index, ListView.Contain);
     }
 
+    function animateToWorkspace(workspaceId) {
+        const targetIndex = root.entries.findIndex(entry => entry.id === workspaceId);
+        if (targetIndex < 0)
+            return;
+        if (targetIndex === root.selectedIndex) {
+            root.selectWorkspace(workspaceId);
+            return;
+        }
+        if (root.swipeActive
+                || GlobalStates.overviewCompactionAnimating
+                || GlobalStates.overviewCompactionSyncing)
+            return;
+        root.clickedWorkspaceId = workspaceId;
+        if (root.swipeSettling)
+            return;
+
+        const distance = Math.abs(targetIndex - root.selectedIndex);
+        root.swipeStartIndex = root.selectedIndex;
+        root.settlementIndex = targetIndex;
+        root.swipeOffset = 0;
+        settleAnimation.to = (root.selectedIndex - targetIndex) * root.pageSpan;
+        settleAnimation.duration = Math.min(800, 260 + (distance - 1) * 125);
+        root.settleEasingType = Easing.InOutCubic;
+        root.swipeSettling = true;
+        topList.positionViewAtIndex(targetIndex, ListView.Contain);
+        settleAnimation.start();
+    }
+
     function navigate(delta) {
         if (root.entries.length === 0)
             return;
@@ -205,6 +237,7 @@ Item {
     function beginSwipe(deltaX, timestamp) {
         if (!root.ownsGesture || root.swipeSettling || root.entries.length === 0)
             return;
+        root.clickedWorkspaceId = -1;
         settleAnimation.stop();
         root.swipeActive = true;
         root.swipeStartIndex = root.selectedIndex;
@@ -251,12 +284,13 @@ Item {
             topList.positionViewAtIndex(root.settlementIndex, ListView.Contain);
         settleAnimation.to = commit ? -direction * root.pageSpan : 0;
         settleAnimation.duration = commit ? 230 : 200;
+        root.settleEasingType = Easing.OutCubic;
         root.swipeSettling = true;
         settleAnimation.start();
     }
 
-    function requestStep(delta) {
-        if (!root.ownsGesture || root.swipeActive || root.swipeSettling || root.entries.length === 0)
+    function startStep(delta) {
+        if (root.swipeActive || root.swipeSettling || root.entries.length === 0)
             return;
         const targetIndex = root.selectedIndex + (delta > 0 ? 1 : -1);
         if (targetIndex < 0 || targetIndex >= root.entries.length)
@@ -266,8 +300,16 @@ Item {
         root.swipeOffset = 0;
         settleAnimation.to = delta > 0 ? -root.pageSpan : root.pageSpan;
         settleAnimation.duration = 260;
+        root.settleEasingType = Easing.OutCubic;
         root.swipeSettling = true;
         settleAnimation.start();
+    }
+
+    function requestStep(delta) {
+        if (!root.ownsGesture)
+            return;
+        root.clickedWorkspaceId = -1;
+        root.startStep(delta);
     }
 
     function finishSettlement() {
@@ -279,11 +321,12 @@ Item {
         root.swipeStartIndex = -1;
         root.settlementIndex = -1;
         root.swipeSettling = false;
+        root.clickedWorkspaceId = -1;
     }
 
     function activateWindow(windowData) {
         WorkspaceNavigation.focusWindow(windowData);
-        GlobalStates.overviewOpen = false;
+        root.closeRequested(false);
     }
 
     function registerDropTarget(item, entry) {
@@ -343,7 +386,7 @@ Item {
         id: settleAnimation
         target: root
         property: "swipeOffset"
-        easing.type: Easing.OutCubic
+        easing.type: root.settleEasingType
         onFinished: root.finishSettlement()
     }
 
@@ -454,15 +497,15 @@ Item {
                         previewHeight: topCard.height
                         closeOnActivate: false
                         interactionEnabled: root.workspaceInteractionEnabled
-                        onActivated: root.selectWorkspace(topCard.modelData.id)
+                        onActivated: root.animateToWorkspace(topCard.modelData.id)
                     }
                 }
             }
 
-            MouseArea {
-                anchors.fill: parent
-                z: 10
-                onClicked: root.selectWorkspace(topCard.modelData.id)
+            TapHandler {
+                acceptedButtons: Qt.LeftButton
+                gesturePolicy: TapHandler.DragThreshold
+                onTapped: root.animateToWorkspace(topCard.modelData.id)
             }
 
             DropArea {
@@ -534,10 +577,15 @@ Item {
                 required property int index
                 readonly property int anchorIndex: root.swipeStartIndex >= 0
                     ? root.swipeStartIndex : root.selectedIndex
+                readonly property bool inClickTravelRange: root.clickedWorkspaceId > 0
+                    && root.swipeSettling
+                    && root.settlementIndex >= 0
+                    && index >= Math.min(anchorIndex, root.settlementIndex)
+                    && index <= Math.max(anchorIndex, root.settlementIndex)
                 x: (index - anchorIndex) * root.pageSpan + root.swipeOffset
                 width: bottomViewport.width
                 height: bottomViewport.height
-                active: Math.abs(index - anchorIndex) <= 1
+                active: inClickTravelRange || Math.abs(index - anchorIndex) <= 1
                 asynchronous: false
 
                 sourceComponent: GalleryWorkspacePage {

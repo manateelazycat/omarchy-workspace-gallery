@@ -13,6 +13,9 @@ Scope {
     property string lockedScreenName: ""
     property real outsideSwipeDistance: 0
     property real verticalSwipeDistance: 0
+    property bool closing: false
+    property bool commitSelectionAfterClose: false
+    property real revealProgress: 0
     property var focusedScreen: Quickshell.screens.find(
         screen => screen.name === (galleryScope.lockedScreenName || Hyprland.focusedMonitor?.name))
         ?? Quickshell.screens[0]
@@ -23,16 +26,26 @@ Scope {
     }
 
     function open(payload) {
+        closeAnimation.stop();
+        galleryScope.closing = false;
+        galleryScope.commitSelectionAfterClose = false;
         const anchor = Hyprland.focusedMonitor?.name ?? "";
         galleryScope.lockedScreenName = anchor;
         GlobalStates.overviewAnchorMonitorName = anchor;
         GlobalStates.overviewFocusedWorkspaceId = galleryScope.currentWorkspaceId();
         GlobalStates.overviewOpen = true;
+        galleryScope.revealProgress = 0;
+        openAnimation.restart();
     }
 
-    function close() {
+    function close(commitSelection = false) {
+        if (!GlobalStates.overviewOpen || galleryScope.closing)
+            return;
         GlobalStates.gallerySwipeFinished(true, 0);
-        GlobalStates.overviewOpen = false;
+        openAnimation.stop();
+        galleryScope.commitSelectionAfterClose = commitSelection;
+        galleryScope.closing = true;
+        closeAnimation.restart();
     }
 
     function toggle() {
@@ -113,8 +126,32 @@ Scope {
     }
 
     function activateSelection() {
-        WorkspaceNavigation.commitSelectedWorkspace();
-        galleryScope.close();
+        galleryScope.close(true);
+    }
+
+    NumberAnimation {
+        id: openAnimation
+        target: galleryScope
+        property: "revealProgress"
+        to: 1
+        duration: 240
+        easing.type: Easing.OutCubic
+    }
+
+    NumberAnimation {
+        id: closeAnimation
+        target: galleryScope
+        property: "revealProgress"
+        to: 0
+        duration: 220
+        easing.type: Easing.InCubic
+        onFinished: {
+            if (galleryScope.commitSelectionAfterClose)
+                WorkspaceNavigation.commitSelectedWorkspace();
+            GlobalStates.overviewOpen = false;
+            galleryScope.closing = false;
+            galleryScope.commitSelectionAfterClose = false;
+        }
     }
 
     function closeSelectedWorkspaceWindow() {
@@ -196,14 +233,14 @@ Scope {
             component: PanelWindow {
                 id: panelWindow
                 screen: panelLoader.modelData
-                visible: GlobalStates.overviewOpen
+                visible: GlobalStates.overviewOpen || galleryScope.closing
                 color: "transparent"
                 exclusionMode: ExclusionMode.Ignore
 
                 WlrLayershell.namespace: "omarchy-workspace-gallery"
                 WlrLayershell.layer: WlrLayer.Overlay
                 WlrLayershell.keyboardFocus: galleryScope.isFocusedScreen(panelWindow.screen)
-                    && GlobalStates.overviewOpen
+                    && GlobalStates.overviewOpen && !galleryScope.closing
                     ? WlrKeyboardFocus.Exclusive
                     : WlrKeyboardFocus.None
 
@@ -215,11 +252,21 @@ Scope {
                 }
 
                 Loader {
+                    id: galleryLoader
                     anchors.fill: parent
-                    active: GlobalStates.overviewOpen
+                    active: GlobalStates.overviewOpen || galleryScope.closing
                     asynchronous: false
+                    opacity: galleryScope.revealProgress
+                    y: (1 - galleryScope.revealProgress) * 28
+                    transform: Scale {
+                        origin.x: galleryLoader.width / 2
+                        origin.y: galleryLoader.height / 2
+                        xScale: 0.96 + galleryScope.revealProgress * 0.04
+                        yScale: 0.96 + galleryScope.revealProgress * 0.04
+                    }
                     sourceComponent: GalleryWidget {
                         screen: panelWindow.screen
+                        onCloseRequested: commitSelection => galleryScope.close(commitSelection)
                     }
                 }
 
