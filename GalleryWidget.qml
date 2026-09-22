@@ -64,7 +64,12 @@ Item {
     property real lastSwipeTimestamp: 0
     property int swipeStartIndex: -1
     property int settlementIndex: -1
-    readonly property bool workspaceInteractionEnabled: !root.swipeActive && !root.swipeSettling
+    property var compactionHandoffGrab: null
+    property url compactionHandoffUrl: ""
+    readonly property bool workspaceInteractionEnabled: !root.swipeActive
+        && !root.swipeSettling
+        && !GlobalStates.overviewCompactionAnimating
+        && !GlobalStates.overviewCompactionSyncing
     readonly property int swipePreviewIndex: {
         if (root.swipeSettling && root.settlementIndex >= 0)
             return root.settlementIndex;
@@ -108,6 +113,74 @@ Item {
                 return "";
             return root.effectiveWorkspaceId(win, address) === workspaceId ? address : "";
         }).filter(address => address.length > 0);
+    }
+
+    function clamp01(value) {
+        return Math.max(0, Math.min(1, Number(value)));
+    }
+
+    function jellyProgress(value) {
+        const t = root.clamp01(value);
+        // A restrained back-ease: it overshoots once, then settles without the
+        // mechanical feel of a plain cubic slide.
+        const overshoot = 1.35;
+        const shifted = t - 1;
+        return 1 + (overshoot + 1) * shifted * shifted * shifted
+            + overshoot * shifted * shifted;
+    }
+
+    function compactionVisualForWorkspace(workspaceId) {
+        const neutral = { x: 0, y: 0, opacity: 1, rotation: 0, xScale: 1, yScale: 1, active: false };
+        if (!GlobalStates.overviewCompactionAnimating)
+            return neutral;
+
+        const id = Number(workspaceId);
+        const elapsed = Number(GlobalStates.overviewCompactionElapsed ?? 0);
+        const timeline = GlobalStates.overviewCompactionTimeline
+            ?? { emptyStages: [], shiftStages: [] };
+        let x = 0;
+        let y = 0;
+        let opacity = 1;
+        let rotation = 0;
+        let xScale = 1;
+        let yScale = 1;
+        let active = false;
+
+        for (const shift of timeline.shiftStages ?? []) {
+            if (id <= Number(shift.afterWorkspaceId) || elapsed < Number(shift.start))
+                continue;
+            const t = root.clamp01((elapsed - Number(shift.start)) / Number(shift.duration));
+            x -= Number(shift.slots) * (root.topCardWidth + root.cardGap)
+                * root.jellyProgress(t);
+            const pulse = Math.sin(Math.PI * t) * 0.045;
+            xScale += pulse;
+            yScale -= pulse * 0.72;
+            active = true;
+        }
+
+        const empty = (timeline.emptyStages ?? []).find(stage =>
+            Number(stage.workspaceId) === id);
+        if (empty && elapsed >= Number(empty.start)) {
+            const t = root.clamp01((elapsed - Number(empty.start)) / Number(empty.duration));
+            const travel = root.jellyProgress(t);
+            x -= root.topCardWidth * 0.24 * travel;
+            y -= (root.topCardHeight + 18) * travel;
+            rotation = -7 * Math.sin(Math.PI * t);
+            const pulse = Math.sin(Math.PI * t);
+            xScale += 0.075 * pulse;
+            yScale -= 0.055 * pulse;
+            opacity = t < 0.72 ? 1 : 1 - root.clamp01((t - 0.72) / 0.28);
+            active = true;
+        }
+
+        return { x, y, opacity, rotation, xScale, yScale, active };
+    }
+
+    function captureCompactionHandoff() {
+        topList.grabToImage(result => {
+            root.compactionHandoffGrab = result;
+            root.compactionHandoffUrl = result.url;
+        });
     }
 
     function selectWorkspace(workspaceId) {
@@ -243,6 +316,14 @@ Item {
 
     Connections {
         target: GlobalStates
+        function onOverviewCompactionHandoffChanged() {
+            if (GlobalStates.overviewCompactionHandoff) {
+                clearCompactionHandoffTimer.stop();
+                root.captureCompactionHandoff();
+            } else if (root.compactionHandoffUrl.toString().length > 0) {
+                clearCompactionHandoffTimer.restart();
+            }
+        }
         function onGallerySwipeStarted(deltaX, timestamp) {
             root.beginSwipe(deltaX, timestamp);
         }
@@ -264,6 +345,16 @@ Item {
         property: "swipeOffset"
         easing.type: Easing.OutCubic
         onFinished: root.finishSettlement()
+    }
+
+    Timer {
+        id: clearCompactionHandoffTimer
+        interval: 180
+        repeat: false
+        onTriggered: {
+            root.compactionHandoffUrl = "";
+            root.compactionHandoffGrab = null;
+        }
     }
 
     Rectangle {
@@ -302,6 +393,27 @@ Item {
             clip: true
             color: Appearance.colors.colSurfaceContainerLow
             border.width: 0
+            readonly property var compactionVisual:
+                root.compactionVisualForWorkspace(topCard.modelData.id)
+            opacity: topCard.compactionVisual.opacity
+            z: topCard.compactionVisual.active ? 20 + topCard.index : 0
+            transform: [
+                Translate {
+                    x: topCard.compactionVisual.x
+                    y: topCard.compactionVisual.y
+                },
+                Rotation {
+                    origin.x: topCard.width / 2
+                    origin.y: topCard.height / 2
+                    angle: topCard.compactionVisual.rotation
+                },
+                Scale {
+                    origin.x: topCard.width / 2
+                    origin.y: topCard.height / 2
+                    xScale: topCard.compactionVisual.xScale
+                    yScale: topCard.compactionVisual.yScale
+                }
+            ]
 
             Image {
                 anchors.fill: parent
@@ -319,21 +431,31 @@ Item {
                     : "transparent"
             }
 
-            Repeater {
-                model: ScriptModel { values: root.windowAddressesForWorkspace(topCard.modelData.id) }
-                delegate: GalleryWindow {
-                    required property string modelData
-                    address: modelData
-                    galleryRoot: root
-                    screen: root.screen
-                    sourceWorkspaceId: topCard.modelData.id
-                    previewX: 0
-                    previewY: 0
-                    previewWidth: topCard.width
-                    previewHeight: topCard.height
-                    closeOnActivate: false
-                    interactionEnabled: root.workspaceInteractionEnabled
-                    onActivated: root.selectWorkspace(topCard.modelData.id)
+            Item {
+                id: topWindowLayer
+                anchors.fill: parent
+                // Preserve the old direct-delegate stacking order. Without an
+                // explicit z the animation wrapper sits below the card-wide
+                // MouseArea, so that area consumes presses before windows can
+                // start their drag.
+                z: 20
+
+                Repeater {
+                    model: ScriptModel { values: root.windowAddressesForWorkspace(topCard.modelData.id) }
+                    delegate: GalleryWindow {
+                        required property string modelData
+                        address: modelData
+                        galleryRoot: root
+                        screen: root.screen
+                        sourceWorkspaceId: topCard.modelData.id
+                        previewX: 0
+                        previewY: 0
+                        previewWidth: topCard.width
+                        previewHeight: topCard.height
+                        closeOnActivate: false
+                        interactionEnabled: root.workspaceInteractionEnabled
+                        onActivated: root.selectWorkspace(topCard.modelData.id)
+                    }
                 }
             }
 
@@ -374,6 +496,25 @@ Item {
                         root.registerDropTarget(topCard, topCard.modelData);
                 }
             }
+        }
+    }
+
+    Image {
+        id: compactionHandoffImage
+        x: topList.x
+        y: topList.y
+        width: topList.width
+        height: topList.height
+        z: 10000
+        source: root.compactionHandoffUrl
+        fillMode: Image.Stretch
+        smooth: true
+        cache: false
+        opacity: GlobalStates.overviewCompactionHandoff ? 1 : 0
+        visible: source.toString().length > 0 && opacity > 0
+
+        Behavior on opacity {
+            NumberAnimation { duration: 140; easing.type: Easing.InOutQuad }
         }
     }
 

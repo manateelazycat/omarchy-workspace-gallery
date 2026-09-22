@@ -14,6 +14,10 @@ BLOCK = f'''{START}
 hl.bind("SUPER + A", hl.dsp.global("quickshell:workspaceGalleryToggle"), {{
   description = "Toggle Workspace Gallery",
 }})
+hl.unbind("SUPER + W")
+hl.bind("SUPER + W", hl.dsp.global("quickshell:workspaceGalleryCloseWindow"), {{
+  description = "Close window",
+}})
 hl.gesture({{
   fingers = 3,
   direction = "vertical",

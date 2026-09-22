@@ -2,6 +2,8 @@
 
 https://github.com/user-attachments/assets/f2a784c9-a5dc-433e-afa6-f3d038c70133
 
+[Workspace compaction animation](assets/workspace-gallery-compaction-animation.mp4)
+
 A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.
 
 ## Requirements
@@ -28,6 +30,8 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 - While the gallery is open, press the left and right arrow keys or `H`/`L`
   to select workspaces. Press `Enter`, `Space`, or `Esc` to focus the selected
   workspace and close the gallery.
+- `Super+W` closes the most recently focused window in the selected workspace;
+  outside the gallery it keeps its normal close-active-window behavior.
 
 Outside the gallery, three-finger horizontal swipes continue switching Hyprland workspaces.
 

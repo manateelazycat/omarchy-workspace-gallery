@@ -8,6 +8,7 @@ import Quickshell.Io
 import Quickshell.Hyprland
 import "WorkspaceCompact.js" as WorkspaceCompact
 import "WorkspaceSwitchOrder.js" as WorkspaceSwitchOrder
+import "WorkspaceWindowSelection.js" as WorkspaceWindowSelection
 
 Singleton {
     id: root
@@ -15,12 +16,39 @@ Singleton {
     property int pendingDragRefreshes: 0
     property bool compactingWorkspaces: false
     property var compactClientsSnapshot: []
+    property var pendingCompactionPlan: null
+    property bool closingSelectedWindow: false
+    property int pendingCloseWorkspaceId: -1
 
     Timer {
         id: compactGuardTimer
-        interval: 800
+        interval: 5000
         repeat: false
-        onTriggered: root.compactingWorkspaces = false
+        onTriggered: root.finishWorkspaceCompaction()
+    }
+
+    NumberAnimation {
+        id: compactionTimelineAnimation
+        target: GlobalStates
+        property: "overviewCompactionElapsed"
+        easing.type: Easing.Linear
+        onFinished: root.preparePendingWorkspaceCompaction()
+    }
+
+    Timer {
+        id: compactionHandoffCaptureTimer
+        // Give every GalleryWidget several render frames to grab the final
+        // animated row before its delegates are rebuilt for the new ids.
+        interval: 80
+        repeat: false
+        onTriggered: root.commitPendingWorkspaceCompaction()
+    }
+
+    Timer {
+        id: compactionRevealTimer
+        interval: 220
+        repeat: false
+        onTriggered: root.finishWorkspaceCompaction()
     }
 
     Process {
@@ -34,7 +62,7 @@ Singleton {
                     compactMonitorsProcess.running = true;
                 } catch (error) {
                     console.warn("[WorkspaceGallery] Failed to read clients for compaction:", error);
-                    root.compactingWorkspaces = false;
+                    root.finishWorkspaceCompaction();
                 }
             }
         }
@@ -52,8 +80,27 @@ Singleton {
                         JSON.parse(compactMonitorsCollector.text || "[]"));
                 } catch (error) {
                     console.warn("[WorkspaceGallery] Failed to read monitors for compaction:", error);
-                    root.compactingWorkspaces = false;
+                    root.finishWorkspaceCompaction();
                 }
+            }
+        }
+    }
+
+    Process {
+        id: closeWorkspaceClientsProcess
+        command: ["hyprctl", "clients", "-j"]
+        stdout: StdioCollector {
+            id: closeWorkspaceClientsCollector
+            onStreamFinished: {
+                try {
+                    const clients = JSON.parse(closeWorkspaceClientsCollector.text || "[]");
+                    root.closeMostRecentClientFromSnapshot(
+                        clients, root.pendingCloseWorkspaceId);
+                } catch (error) {
+                    console.warn("[WorkspaceGallery] Failed to read clients for close:", error);
+                }
+                root.closingSelectedWindow = false;
+                root.pendingCloseWorkspaceId = -1;
             }
         }
     }
@@ -243,13 +290,65 @@ Singleton {
         return true;
     }
 
+    function closeMostRecentWindowInWorkspace(workspaceId) {
+        const id = Number(workspaceId);
+        if (!Number.isInteger(id) || id < 1 || root.closingSelectedWindow)
+            return false;
+        root.closingSelectedWindow = true;
+        root.pendingCloseWorkspaceId = id;
+        closeWorkspaceClientsProcess.running = true;
+        return true;
+    }
+
+    function closeMostRecentClientFromSnapshot(clients, workspaceId) {
+        const client = WorkspaceWindowSelection.mostRecentClientForWorkspace(
+            clients, workspaceId);
+        const address = ServiceManager.workspace.normalizeAddress(client?.address);
+        if (address.length === 0)
+            return false;
+        Hyprland.dispatch(`hl.dsp.window.close({ window = ${root.luaQuoted(`address:${address}`)} })`);
+        GlobalStates.refreshOverviewModel();
+        root.pendingDragRefreshes = 4;
+        refreshAfterDragTimer.restart();
+        return true;
+    }
+
     function executeWorkspaceCompaction(clients, monitors) {
         const plan = WorkspaceCompact.buildPlan(
             clients, [], monitors);
         if (plan.moves.length === 0) {
-            root.compactingWorkspaces = false;
+            root.finishWorkspaceCompaction();
             return false;
         }
+
+        root.pendingCompactionPlan = plan;
+        const timeline = WorkspaceCompact.buildAnimationPlan(plan.sourceIds);
+        GlobalStates.overviewCompactionMoves = plan.moves;
+        GlobalStates.overviewCompactionTimeline = timeline;
+        GlobalStates.overviewCompactionElapsed = 0;
+        GlobalStates.overviewCompactionSyncing = false;
+        GlobalStates.overviewCompactionAnimating = true;
+        compactionTimelineAnimation.from = 0;
+        compactionTimelineAnimation.to = timeline.duration;
+        compactionTimelineAnimation.duration = timeline.duration;
+        compactGuardTimer.interval = timeline.duration + 1400;
+        compactGuardTimer.restart();
+        compactionTimelineAnimation.start();
+        return true;
+    }
+
+    function commitPendingWorkspaceCompaction() {
+        const plan = root.pendingCompactionPlan;
+        if (!plan || !plan.moves || plan.moves.length === 0) {
+            root.finishWorkspaceCompaction();
+            return false;
+        }
+
+        // Hide preview contents while their backing workspaces change. The card
+        // shells snap into their final slots under the fade, avoiding a reverse
+        // slide after the compositor reports the new workspace ids.
+        GlobalStates.overviewCompactionSyncing = true;
+        GlobalStates.overviewCompactionAnimating = false;
 
         const pendingWindows = Object.assign({},
             GlobalStates.overviewPendingWindowWorkspaceByAddress ?? {});
@@ -296,7 +395,34 @@ Singleton {
         GlobalStates.refreshOverviewModel();
         root.pendingDragRefreshes = 6;
         refreshAfterDragTimer.restart();
+        compactionRevealTimer.restart();
         return true;
+    }
+
+    function preparePendingWorkspaceCompaction() {
+        const plan = root.pendingCompactionPlan;
+        if (!plan || !plan.moves || plan.moves.length === 0) {
+            root.finishWorkspaceCompaction();
+            return false;
+        }
+        GlobalStates.overviewCompactionHandoff = true;
+        compactionHandoffCaptureTimer.restart();
+        return true;
+    }
+
+    function finishWorkspaceCompaction() {
+        compactionTimelineAnimation.stop();
+        compactionHandoffCaptureTimer.stop();
+        compactionRevealTimer.stop();
+        compactGuardTimer.stop();
+        GlobalStates.overviewCompactionAnimating = false;
+        GlobalStates.overviewCompactionSyncing = false;
+        GlobalStates.overviewCompactionHandoff = false;
+        GlobalStates.overviewCompactionMoves = [];
+        GlobalStates.overviewCompactionTimeline = ({ emptyStages: [], shiftStages: [], duration: 0 });
+        GlobalStates.overviewCompactionElapsed = 0;
+        root.pendingCompactionPlan = null;
+        root.compactingWorkspaces = false;
     }
 
     function resetOverviewDragState() {

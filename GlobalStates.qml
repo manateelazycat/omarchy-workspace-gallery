@@ -50,6 +50,14 @@ Singleton {
     property var overviewPendingWorkspaceMonitorById: ({})
     property var overviewPendingOccupiedWorkspaces: []
     property var overviewPendingWindowWorkspaceByAddress: ({})
+    // Compaction is presented in two phases: cards first gather visually, then
+    // their real Hyprland workspace moves are committed behind a short fade.
+    property bool overviewCompactionAnimating: false
+    property bool overviewCompactionSyncing: false
+    property bool overviewCompactionHandoff: false
+    property var overviewCompactionMoves: []
+    property var overviewCompactionTimeline: ({ emptyStages: [], shiftStages: [], duration: 0 })
+    property real overviewCompactionElapsed: 0
     property int overviewRefreshSerial: 0
     property bool regionSelectorOpen: false
     property bool screenshotActive: false

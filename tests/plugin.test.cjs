@@ -48,6 +48,31 @@ test("Super+A toggles the gallery and arrow keys select workspaces", () => {
   assert.match(gallery, /event\.key === Qt\.Key_Right[\s\S]*galleryScope\.selectRelative\(1\)/);
 });
 
+test("Super+W closes the latest window from the workspace selected in the gallery", () => {
+  const config = read("scripts/gesture_config.py");
+  const gallery = read("Gallery.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+
+  assert.match(config, /hl\.unbind\("SUPER \+ W"\)/);
+  assert.match(config, /hl\.bind\("SUPER \+ W", hl\.dsp\.global\("quickshell:workspaceGalleryCloseWindow"\)/);
+  assert.match(gallery, /name: "workspaceGalleryCloseWindow"[\s\S]*galleryScope\.closeSelectedWorkspaceWindow\(\)/);
+  assert.match(gallery, /GlobalStates\.overviewFocusedWorkspaceId[\s\S]*WorkspaceNavigation\.closeMostRecentWindowInWorkspace\(workspaceId\)/);
+  assert.match(gallery, /if \(!GlobalStates\.overviewOpen\)[\s\S]*hl\.dsp\.window\.close\(\)/);
+  assert.match(navigation, /WorkspaceWindowSelection\.mostRecentClientForWorkspace/);
+});
+
+test("selected-workspace close prefers the most recently focused visible client", () => {
+  const selection = require(path.join(root, "WorkspaceWindowSelection.js"));
+  const clients = [
+    { address: "0xold", mapped: true, hidden: false, focusHistoryID: 8, workspace: { id: 4 } },
+    { address: "0xnew", mapped: true, hidden: false, focusHistoryID: 1, workspace: { id: 4 } },
+    { address: "0xhidden", mapped: true, hidden: true, focusHistoryID: 0, workspace: { id: 4 } },
+    { address: "0xother", mapped: true, hidden: false, focusHistoryID: 0, workspace: { id: 1 } }
+  ];
+  assert.equal(selection.mostRecentClientForWorkspace(clients, 4)?.address, "0xnew");
+  assert.equal(selection.mostRecentClientForWorkspace(clients, 2), null);
+});
+
 test("Down and a two-finger pinch compact occupied workspaces", () => {
   const gestures = read("scripts/gesture_config.py");
   const gallery = read("Gallery.qml");
@@ -91,6 +116,54 @@ test("workspace compaction preserves order and removes every numeric gap", () =>
   assert.equal(plan.moves[1].monitorName, "HDMI-A-1");
   assert.deepEqual(plan.moves[0].addresses, ["0x2", "0x3"]);
   assert.deepEqual(compact.remapIds([9, 4, 1, 4], plan.mapping), [4, 2, 1]);
+});
+
+test("workspace compaction animates before committing compositor moves", () => {
+  const states = read("GlobalStates.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+  const gallery = read("GalleryWidget.qml");
+
+  assert.match(states, /property bool overviewCompactionAnimating: false/);
+  assert.match(states, /property bool overviewCompactionSyncing: false/);
+  assert.match(states, /property bool overviewCompactionHandoff: false/);
+  assert.match(states, /property real overviewCompactionElapsed: 0/);
+  assert.match(navigation, /id: compactionTimelineAnimation[\s\S]*property: "overviewCompactionElapsed"/);
+  assert.match(navigation, /onFinished: root\.preparePendingWorkspaceCompaction\(\)/);
+  assert.match(navigation, /id: compactionHandoffCaptureTimer[\s\S]*interval: 80/);
+  assert.match(navigation, /buildAnimationPlan\(plan\.sourceIds\)[\s\S]*compactionTimelineAnimation\.start\(\)/);
+  assert.match(navigation, /function commitPendingWorkspaceCompaction\(\)[\s\S]*overviewCompactionSyncing = true[\s\S]*hl\.dsp\.window\.move/);
+  assert.match(gallery, /function jellyProgress\(value\)/);
+  assert.match(gallery, /y -= \(root\.topCardHeight \+ 18\) \* travel/);
+  assert.match(gallery, /shift\.slots[\s\S]*root\.jellyProgress\(t\)/);
+  assert.match(gallery, /topList\.grabToImage\(result =>/);
+  assert.match(gallery, /id: compactionHandoffImage[\s\S]*overviewCompactionHandoff \? 1 : 0/);
+  const bottomViewport = gallery.slice(gallery.indexOf("id: bottomViewport"), gallery.indexOf("id: dragProxy"));
+  assert.doesNotMatch(bottomViewport, /overviewCompactionSyncing/);
+});
+
+test("empty workspace cards leave left-to-right at half-duration intervals", () => {
+  const compact = require(path.join(root, "WorkspaceCompact.js"));
+  const animation = compact.buildAnimationPlan([1, 5]);
+
+  assert.deepEqual(animation.emptyStages.map(stage => [stage.workspaceId, stage.start]), [
+    [2, 0], [3, 190], [4, 380]
+  ]);
+  assert.equal(animation.shiftStages.length, 1);
+  assert.deepEqual(animation.shiftStages[0], {
+    afterWorkspaceId: 4,
+    slots: 3,
+    start: 760,
+    duration: 480
+  });
+  assert.equal(animation.duration, 1240);
+});
+
+test("the animated top-window layer remains above the card click target", () => {
+  const gallery = read("GalleryWidget.qml");
+  assert.match(gallery, /id: topWindowLayer[\s\S]*z: 20[\s\S]*Repeater/);
+  assert.match(gallery, /id: topWindowLayer[\s\S]*GalleryWindow[\s\S]*MouseArea \{[\s\S]*z: 10/);
+  const topWindowLayer = gallery.slice(gallery.indexOf("id: topWindowLayer"), gallery.indexOf("MouseArea {", gallery.indexOf("id: topWindowLayer")));
+  assert.doesNotMatch(topWindowLayer, /overviewCompactionSyncing|Behavior on opacity/);
 });
 
 test("bottom gallery uses a follow-finger workspace track", () => {

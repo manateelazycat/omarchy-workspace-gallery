@@ -69,9 +69,71 @@ function remapIds(ids, mapping) {
     return result;
 }
 
+// Build a visual timeline for the gaps between occupied workspaces. Empty
+// cards leave one-by-one; once the final card in a gap has cleared the row,
+// every occupied card to its right shifts left as a group.
+function buildAnimationPlan(sourceIds) {
+    const occupied = (sourceIds ?? [])
+        .map(Number)
+        .filter(validWorkspaceId)
+        .sort((a, b) => a - b);
+    if (occupied.length === 0)
+        return { emptyStages: [], shiftStages: [], duration: 0 };
+
+    const occupiedSet = {};
+    for (const id of occupied)
+        occupiedSet[id] = true;
+
+    const groups = [];
+    let group = [];
+    for (let id = 1; id < occupied[occupied.length - 1]; ++id) {
+        if (!occupiedSet[id]) {
+            group.push(id);
+        } else if (group.length > 0) {
+            groups.push(group);
+            group = [];
+        }
+    }
+    if (group.length > 0)
+        groups.push(group);
+
+    const emptyDuration = 380;
+    const emptyStagger = emptyDuration / 2;
+    const shiftDuration = 480;
+    const phasePause = 70;
+    const emptyStages = [];
+    const shiftStages = [];
+    let cursor = 0;
+
+    for (const emptyIds of groups) {
+        for (let index = 0; index < emptyIds.length; ++index) {
+            emptyStages.push({
+                workspaceId: emptyIds[index],
+                start: cursor + index * emptyStagger,
+                duration: emptyDuration
+            });
+        }
+        const shiftStart = cursor + (emptyIds.length - 1) * emptyStagger + emptyDuration;
+        shiftStages.push({
+            afterWorkspaceId: emptyIds[emptyIds.length - 1],
+            slots: emptyIds.length,
+            start: shiftStart,
+            duration: shiftDuration
+        });
+        cursor = shiftStart + shiftDuration + phasePause;
+    }
+
+    return {
+        emptyStages,
+        shiftStages,
+        duration: Math.max(0, cursor - phasePause)
+    };
+}
+
 if (typeof module !== "undefined") {
     module.exports = {
         buildPlan,
+        buildAnimationPlan,
         remapIds
     };
 }

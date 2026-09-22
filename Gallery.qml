@@ -117,6 +117,17 @@ Scope {
         galleryScope.close();
     }
 
+    function closeSelectedWorkspaceWindow() {
+        if (!GlobalStates.overviewOpen) {
+            Hyprland.dispatch("hl.dsp.window.close()");
+            return;
+        }
+        const workspaceId = GlobalStates.overviewFocusedWorkspaceId > 0
+            ? GlobalStates.overviewFocusedWorkspaceId
+            : galleryScope.currentWorkspaceId();
+        WorkspaceNavigation.closeMostRecentWindowInWorkspace(workspaceId);
+    }
+
     function isFocusedScreen(screen) {
         return screen?.name === galleryScope.focusedScreen?.name;
     }
@@ -268,5 +279,11 @@ Scope {
         name: "workspaceGalleryPrevious"
         description: "Select the previous gallery workspace"
         onPressed: galleryScope.selectRelative(-1)
+    }
+
+    GlobalShortcut {
+        name: "workspaceGalleryCloseWindow"
+        description: "Close the latest window in the selected gallery workspace"
+        onPressed: galleryScope.closeSelectedWorkspaceWindow()
     }
 }
