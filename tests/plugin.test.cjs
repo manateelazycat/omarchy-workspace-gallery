@@ -184,6 +184,47 @@ test("a lone window has vertical breathing room in the large preview", () => {
   assert.match(page, /previewHeight: Math\.max\(1, page\.height - page\.singleWindowVerticalInset \* 2\)/);
 });
 
+test("large previews expose crowded windows without affecting simple pairs", () => {
+  const expose = require(path.join(root, "WorkspaceExpose.js"));
+  const separate = expose.buildLayout([
+    { address: "a", x: 0, y: 0, width: 300, height: 300, focusHistoryId: 0 },
+    { address: "b", x: 700, y: 0, width: 300, height: 300, focusHistoryId: 1 }
+  ], 1000, 700);
+  assert.equal(separate.enabled, false);
+
+  const crowded = expose.buildLayout([
+    { address: "a", x: 100, y: 100, width: 700, height: 500, focusHistoryId: 0 },
+    { address: "b", x: 160, y: 140, width: 650, height: 480, focusHistoryId: 1 }
+  ], 1000, 700);
+  assert.equal(crowded.enabled, true);
+  assert.ok(crowded.overlap >= 0.35);
+  assert.ok(crowded.rects.a.width > crowded.rects.b.width);
+  assert.equal(expose.intersectionRatio(crowded.rects.a, crowded.rects.b), 0);
+
+  const group = expose.buildLayout([
+    { address: "a", x: 100, y: 100, width: 700, height: 500, focusHistoryId: 0 },
+    { address: "b", x: 120, y: 120, width: 500, height: 400, focusHistoryId: 1 },
+    { address: "c", x: 140, y: 140, width: 500, height: 400, focusHistoryId: 2 }
+  ], 1000, 700);
+  assert.equal(group.enabled, true);
+  for (const left of ["a", "b", "c"])
+    for (const right of ["a", "b", "c"])
+      if (left < right)
+        assert.equal(expose.intersectionRatio(group.rects[left], group.rects[right]), 0);
+});
+
+test("large preview animates between spatial and expose geometry", () => {
+  const page = read("GalleryWorkspacePage.qml");
+  const window = read("OverviewWindow.qml");
+  assert.match(page, /WorkspaceExpose\.buildLayout/);
+  assert.match(page, /layoutOverrideEnabled: page\.exposeReady/);
+  assert.match(page, /geometryAnimationEnabled: true/);
+  assert.match(window, /property bool layoutOverrideEnabled/);
+  assert.match(read("GalleryWindow.qml"), /root\.restorePositionBinding\(\)/);
+  for (const property of ["x", "y", "width", "height"])
+    assert.match(window, new RegExp(`Behavior on ${property}`));
+});
+
 test("workspace labels are hidden and swipe target drives the top highlight", () => {
   const gallery = read("GalleryWidget.qml");
   const page = read("GalleryWorkspacePage.qml");

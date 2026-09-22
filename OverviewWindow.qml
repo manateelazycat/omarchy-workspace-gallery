@@ -104,11 +104,18 @@ Item { // Window
     property bool holdPosition: false
     property real holdX: 0
     property real holdY: 0
+    property bool layoutOverrideEnabled: false
+    property bool geometryAnimationEnabled: false
+    property real layoutX: localX
+    property real layoutY: localY
+    property real layoutWidth: targetWindowWidth
+    property real layoutHeight: targetWindowHeight
+    property real layoutZ: 0
 
-    x: holdPosition ? holdX : (xOffset + localX)
-    y: holdPosition ? holdY : (yOffset + localY)
-    width: targetWindowWidth
-    height: targetWindowHeight
+    x: holdPosition ? holdX : xOffset + (layoutOverrideEnabled ? layoutX : localX)
+    y: holdPosition ? holdY : yOffset + (layoutOverrideEnabled ? layoutY : localY)
+    width: layoutOverrideEnabled ? layoutWidth : targetWindowWidth
+    height: layoutOverrideEnabled ? layoutHeight : targetWindowHeight
     // ScreencopyView delivers the first frame asynchronously. Fade a window
     // in when that frame arrives instead of making every workspace card flash
     // independently during Overview startup.
@@ -118,6 +125,26 @@ Item { // Window
         NumberAnimation { duration: 40; easing.type: Easing.OutCubic }
     }
 
+    Behavior on x {
+        enabled: root.geometryAnimationEnabled && !root.Drag.active && !root.holdPosition
+        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on y {
+        enabled: root.geometryAnimationEnabled && !root.Drag.active && !root.holdPosition
+        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on width {
+        enabled: root.geometryAnimationEnabled && !root.Drag.active
+        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+    }
+
+    Behavior on height {
+        enabled: root.geometryAnimationEnabled && !root.Drag.active
+        NumberAnimation { duration: 420; easing.type: Easing.OutCubic }
+    }
+
     function holdCurrentPosition() {
         holdX = x;
         holdY = y;
@@ -125,8 +152,10 @@ Item { // Window
     }
 
     function restorePositionBinding() {
-        x = Qt.binding(() => root.holdPosition ? root.holdX : root.xOffset + root.localX);
-        y = Qt.binding(() => root.holdPosition ? root.holdY : root.yOffset + root.localY);
+        x = Qt.binding(() => root.holdPosition ? root.holdX
+            : root.xOffset + (root.layoutOverrideEnabled ? root.layoutX : root.localX));
+        y = Qt.binding(() => root.holdPosition ? root.holdY
+            : root.yOffset + (root.layoutOverrideEnabled ? root.layoutY : root.localY));
     }
 
     function releaseHeldPosition() {

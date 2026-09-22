@@ -113,7 +113,9 @@ OverviewWindow {
     topRightRadius: 5
     bottomLeftRadius: 5
     bottomRightRadius: 5
-    z: Drag.active ? 10000 : 20 + (root.windowData?.floating ? 2 : 0)
+    z: Drag.active ? 10000 : (root.layoutOverrideEnabled
+        ? 30 + root.layoutZ
+        : 20 + (root.windowData?.floating ? 2 : 0))
 
     onLiveWindowDataChanged: {
         if (root.liveWindowData)
@@ -196,8 +198,7 @@ OverviewWindow {
             CrossMonitorDrag.end();
             root.pressed = false;
             root.Drag.active = false;
-            root.x = Qt.binding(() => root.xOffset + root.localX);
-            root.y = Qt.binding(() => root.yOffset + root.localY);
+            root.restorePositionBinding();
             WorkspaceNavigation.commitWindowDrag(
                 root.address,
                 root.sourceWorkspaceId,
