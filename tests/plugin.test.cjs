@@ -51,14 +51,34 @@ test("Super+A toggles the gallery and arrow keys select workspaces", () => {
 test("all gallery close paths use a progressive exit animation", () => {
   const gallery = read("Gallery.qml");
   const widget = read("GalleryWidget.qml");
-  assert.match(gallery, /function close\(commitSelection = false\)/);
+  assert.match(gallery, /function close\(commitSelection = false, workspaceId = -1, windowData = null\)/);
   assert.match(gallery, /id: closeAnimation[\s\S]*property: "revealProgress"[\s\S]*duration: 220/);
   assert.match(gallery, /visible: GlobalStates\.overviewOpen \|\| galleryScope\.closing/);
   assert.match(gallery, /opacity: galleryScope\.revealProgress/);
   assert.match(gallery, /y: \(1 - galleryScope\.revealProgress\) \* 28/);
   assert.match(gallery, /galleryScope\.close\(true\)/);
-  assert.match(widget, /signal closeRequested\(bool commitSelection\)/);
-  assert.match(widget, /root\.closeRequested\(false\)/);
+  assert.match(widget, /signal closeRequested\(bool commitSelection, int workspaceId, var windowData\)/);
+});
+
+test("clicking the large preview commits the workspace under the pointer", () => {
+  const widget = read("GalleryWidget.qml");
+  const page = read("GalleryWorkspacePage.qml");
+  const activateWorkspace = widget.slice(
+    widget.indexOf("function activateWorkspace(workspaceId)"),
+    widget.indexOf("function activateWindow", widget.indexOf("function activateWorkspace(workspaceId)")));
+  const activateWindow = widget.slice(
+    widget.indexOf("function activateWindow(windowData, workspaceId)"),
+    widget.indexOf("function registerDropTarget", widget.indexOf("function activateWindow(windowData, workspaceId)")));
+
+  assert.match(page, /MouseArea\s*\{[\s\S]*onClicked:[\s\S]*activateWorkspace\(page\.entry\.id\)/);
+  assert.match(page, /onActivated: windowData => page\.galleryRoot\.activateWindow\(windowData, page\.entry\.id\)/);
+  assert.match(activateWorkspace, /root\.selectWorkspace\(workspaceId\)[\s\S]*root\.closeRequested\(true, workspaceId, null\)/);
+  assert.match(activateWindow, /root\.selectWorkspace\(workspaceId\)/);
+  assert.match(activateWindow, /root\.closeRequested\(true, workspaceId, windowData\)/);
+  const gallery = read("Gallery.qml");
+  assert.match(gallery, /galleryScope\.closingWorkspaceId = commitSelection[\s\S]*workspaceId > 0 \? workspaceId : GlobalStates\.overviewFocusedWorkspaceId/);
+  assert.match(gallery, /GlobalStates\.overviewFocusedWorkspaceId = galleryScope\.closingWorkspaceId;[\s\S]*WorkspaceNavigation\.commitSelectedWorkspace\(\)/);
+  assert.match(gallery, /GlobalStates\.overviewOpen = false;[\s\S]*Qt\.callLater\(\(\) => WorkspaceNavigation\.focusWindow\(windowData\)\)/);
 });
 
 test("Super+W closes the latest window from the workspace selected in the gallery", () => {
@@ -151,7 +171,7 @@ test("workspace compaction animates before committing compositor moves", () => {
   assert.match(gallery, /topList\.grabToImage\(result =>/);
   assert.match(gallery, /id: compactionHandoffImage[\s\S]*overviewCompactionHandoff \? 1 : 0/);
   const bottomViewport = gallery.slice(gallery.indexOf("id: bottomViewport"), gallery.indexOf("id: dragProxy"));
-  assert.doesNotMatch(bottomViewport, /overviewCompactionSyncing/);
+  assert.match(bottomViewport, /active: inClickTravelRange \|\| Math\.abs\(index - anchorIndex\) <= 1/);
 });
 
 test("empty workspace cards leave left-to-right at half-duration intervals", () => {
@@ -211,45 +231,13 @@ test("a lone window has vertical breathing room in the large preview", () => {
   assert.match(page, /previewHeight: Math\.max\(1, page\.height - page\.singleWindowVerticalInset \* 2\)/);
 });
 
-test("large previews expose crowded windows without affecting simple pairs", () => {
-  const expose = require(path.join(root, "WorkspaceExpose.js"));
-  const separate = expose.buildLayout([
-    { address: "a", x: 0, y: 0, width: 300, height: 300, focusHistoryId: 0 },
-    { address: "b", x: 700, y: 0, width: 300, height: 300, focusHistoryId: 1 }
-  ], 1000, 700);
-  assert.equal(separate.enabled, false);
-
-  const crowded = expose.buildLayout([
-    { address: "a", x: 100, y: 100, width: 700, height: 500, focusHistoryId: 0 },
-    { address: "b", x: 160, y: 140, width: 650, height: 480, focusHistoryId: 1 }
-  ], 1000, 700);
-  assert.equal(crowded.enabled, true);
-  assert.ok(crowded.overlap >= 0.35);
-  assert.ok(crowded.rects.a.width > crowded.rects.b.width);
-  assert.equal(expose.intersectionRatio(crowded.rects.a, crowded.rects.b), 0);
-
-  const group = expose.buildLayout([
-    { address: "a", x: 100, y: 100, width: 700, height: 500, focusHistoryId: 0 },
-    { address: "b", x: 120, y: 120, width: 500, height: 400, focusHistoryId: 1 },
-    { address: "c", x: 140, y: 140, width: 500, height: 400, focusHistoryId: 2 }
-  ], 1000, 700);
-  assert.equal(group.enabled, true);
-  for (const left of ["a", "b", "c"])
-    for (const right of ["a", "b", "c"])
-      if (left < right)
-        assert.equal(expose.intersectionRatio(group.rects[left], group.rects[right]), 0);
-});
-
-test("large preview animates between spatial and expose geometry", () => {
+test("large preview keeps the live workspace layout for crowded windows", () => {
   const page = read("GalleryWorkspacePage.qml");
   const window = read("OverviewWindow.qml");
-  assert.match(page, /WorkspaceExpose\.buildLayout/);
-  assert.match(page, /layoutOverrideEnabled: page\.exposeReady/);
-  assert.match(page, /geometryAnimationEnabled: true/);
-  assert.match(window, /property bool layoutOverrideEnabled/);
-  assert.match(read("GalleryWindow.qml"), /root\.restorePositionBinding\(\)/);
-  for (const property of ["x", "y", "width", "height"])
-    assert.match(window, new RegExp(`Behavior on ${property}`));
+  assert.doesNotMatch(page, /WorkspaceExpose|exposeLayout|layoutOverrideEnabled|geometryAnimationEnabled/);
+  assert.match(page, /previewX: 0[\s\S]*previewY: page\.singleWindowVerticalInset[\s\S]*previewWidth: page\.width/);
+  assert.match(window, /property bool layoutOverrideEnabled: false/);
+  assert.match(window, /property bool geometryAnimationEnabled: false/);
 });
 
 test("workspace labels are hidden and swipe target drives the top highlight", () => {
@@ -329,7 +317,7 @@ test("Escape commits the selected workspace before closing the gallery", () => {
   const source = read("Gallery.qml");
   assert.match(source, /event\.key === Qt\.Key_Escape\) \{\s+galleryScope\.activateSelection\(\);/);
   assert.match(source, /function activateSelection\(\) \{\s+galleryScope\.close\(true\);/);
-  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose\)\s+WorkspaceNavigation\.commitSelectedWorkspace\(\);/);
+  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose\) \{[\s\S]*WorkspaceNavigation\.commitSelectedWorkspace\(\);/);
 });
 
 test("high-frequency swipe events do not refresh the workspace data model", () => {

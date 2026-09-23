@@ -11,7 +11,7 @@ import "ColorUtils.js" as ColorUtils
 Item {
     id: root
 
-    signal closeRequested(bool commitSelection)
+    signal closeRequested(bool commitSelection, int workspaceId, var windowData)
 
     required property var screen
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
@@ -324,9 +324,14 @@ Item {
         root.clickedWorkspaceId = -1;
     }
 
-    function activateWindow(windowData) {
-        WorkspaceNavigation.focusWindow(windowData);
-        root.closeRequested(false);
+    function activateWorkspace(workspaceId) {
+        root.selectWorkspace(workspaceId);
+        root.closeRequested(true, workspaceId, null);
+    }
+
+    function activateWindow(windowData, workspaceId) {
+        root.selectWorkspace(workspaceId);
+        root.closeRequested(true, workspaceId, windowData);
     }
 
     function registerDropTarget(item, entry) {
@@ -594,6 +599,9 @@ Item {
                     screen: root.screen
                     wallpaperUrl: root.wallpaperUrl
                     interactionEnabled: root.workspaceInteractionEnabled
+                    activationEnabled: !root.swipeActive
+                        && !GlobalStates.overviewCompactionAnimating
+                        && !GlobalStates.overviewCompactionSyncing
                 }
             }
         }

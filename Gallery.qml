@@ -15,6 +15,8 @@ Scope {
     property real verticalSwipeDistance: 0
     property bool closing: false
     property bool commitSelectionAfterClose: false
+    property int closingWorkspaceId: -1
+    property var closingWindowData: null
     property real revealProgress: 0
     property var focusedScreen: Quickshell.screens.find(
         screen => screen.name === (galleryScope.lockedScreenName || Hyprland.focusedMonitor?.name))
@@ -29,6 +31,8 @@ Scope {
         closeAnimation.stop();
         galleryScope.closing = false;
         galleryScope.commitSelectionAfterClose = false;
+        galleryScope.closingWorkspaceId = -1;
+        galleryScope.closingWindowData = null;
         const anchor = Hyprland.focusedMonitor?.name ?? "";
         galleryScope.lockedScreenName = anchor;
         GlobalStates.overviewAnchorMonitorName = anchor;
@@ -38,12 +42,16 @@ Scope {
         openAnimation.restart();
     }
 
-    function close(commitSelection = false) {
+    function close(commitSelection = false, workspaceId = -1, windowData = null) {
         if (!GlobalStates.overviewOpen || galleryScope.closing)
             return;
         GlobalStates.gallerySwipeFinished(true, 0);
         openAnimation.stop();
         galleryScope.commitSelectionAfterClose = commitSelection;
+        galleryScope.closingWorkspaceId = commitSelection
+            ? (workspaceId > 0 ? workspaceId : GlobalStates.overviewFocusedWorkspaceId)
+            : -1;
+        galleryScope.closingWindowData = windowData;
         galleryScope.closing = true;
         closeAnimation.restart();
     }
@@ -146,11 +154,19 @@ Scope {
         duration: 220
         easing.type: Easing.InCubic
         onFinished: {
-            if (galleryScope.commitSelectionAfterClose)
+            if (galleryScope.commitSelectionAfterClose) {
+                if (galleryScope.closingWorkspaceId > 0)
+                    GlobalStates.overviewFocusedWorkspaceId = galleryScope.closingWorkspaceId;
                 WorkspaceNavigation.commitSelectedWorkspace();
+            }
+            const windowData = galleryScope.closingWindowData;
             GlobalStates.overviewOpen = false;
             galleryScope.closing = false;
             galleryScope.commitSelectionAfterClose = false;
+            galleryScope.closingWorkspaceId = -1;
+            galleryScope.closingWindowData = null;
+            if (windowData)
+                Qt.callLater(() => WorkspaceNavigation.focusWindow(windowData));
         }
     }
 
@@ -266,7 +282,8 @@ Scope {
                     }
                     sourceComponent: GalleryWidget {
                         screen: panelWindow.screen
-                        onCloseRequested: commitSelection => galleryScope.close(commitSelection)
+                        onCloseRequested: (commitSelection, workspaceId, windowData) =>
+                            galleryScope.close(commitSelection, workspaceId, windowData)
                     }
                 }
 
