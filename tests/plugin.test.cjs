@@ -77,7 +77,7 @@ test("clicking the large preview commits the workspace under the pointer", () =>
   assert.match(activateWindow, /root\.closeRequested\(true, workspaceId, windowData, root\.monitor\?\.name \?\? ""\)/);
   const gallery = read("Gallery.qml");
   assert.match(gallery, /galleryScope\.closingWorkspaceId = commitSelection[\s\S]*galleryScope\.selectedWorkspaceId\(galleryScope\.closingMonitorName\)/);
-  assert.match(gallery, /WorkspaceNavigation\.commitWorkspaceForMonitor\([\s\S]*galleryScope\.closingMonitorName, galleryScope\.closingWorkspaceId\)/);
+  assert.match(gallery, /WorkspaceNavigation\.commitGallerySelections\([\s\S]*galleryScope\.closingSelectionByMonitor,[\s\S]*galleryScope\.closingMonitorName\)/);
   assert.match(gallery, /GlobalStates\.overviewOpen = false;[\s\S]*Qt\.callLater\(\(\) => WorkspaceNavigation\.focusWindow\(windowData\)\)/);
 });
 
@@ -96,6 +96,23 @@ test("each gallery monitor keeps its own selected workspace and keyboard target"
   assert.match(widget, /root\.selectWorkspace\(fallback\.id, false\)/);
   assert.match(navigation, /function commitWorkspaceForMonitor\(monitorName, workspaceId\)[\s\S]*overviewWorkspaceEntriesForMonitor\([\s\S]*name, true/);
   assert.doesNotMatch(widget, /GlobalStates\.overviewFocusedWorkspaceId/);
+});
+
+test("closing the gallery commits every monitor's selected workspace", () => {
+  const gallery = read("Gallery.qml");
+  const widget = read("GalleryWidget.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+
+  assert.match(gallery, /const selections = Object\.assign\(\{\}, GlobalStates\.gallerySelectedWorkspaceByMonitor\)/);
+  assert.match(gallery, /galleryScope\.closingSelectionByMonitor = selections/);
+  assert.match(gallery, /WorkspaceNavigation\.commitGallerySelections\(/);
+  const close = gallery.slice(gallery.indexOf("function close("), gallery.indexOf("function toggle()"));
+  assert.ok(close.indexOf("galleryScope.closing = true") < close.indexOf("galleryScope.closingWorkspaceId = commitSelection"));
+  assert.match(widget, /onClosingChanged:[\s\S]*settleAnimation\.stop\(\);[\s\S]*root\.finishSettlement\(\)/);
+  assert.match(gallery, /closing: galleryScope\.closing/);
+  assert.match(navigation, /function commitGallerySelections\(selections, focusedMonitorName\)/);
+  assert.match(navigation, /for \(const name of Object\.keys\(selected\)\)/);
+  assert.match(navigation, /root\.commitWorkspaceForMonitor\(name, selected\[name\]\)/);
 });
 
 test("Super+W closes the latest window from the workspace selected in the gallery", () => {
@@ -297,6 +314,32 @@ test("drop coordinates are mapped into the real workspace before tiled insertion
   assert.match(navigation, /x = \$\{restoreX\}, y = \$\{restoreY\}/);
 });
 
+test("cross-monitor window drops track visible targets without moving an existing workspace", () => {
+  const gallery = read("Gallery.qml");
+  const window = read("GalleryWindow.qml");
+  const widget = read("GalleryWidget.qml");
+  const page = read("GalleryWorkspacePage.qml");
+  const bridge = read("CrossMonitorDrag.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+
+  assert.match(bridge, /command: \["hyprctl", "cursorpos", "-j"\]/);
+  assert.match(bridge, /root\.updatePointer\(position\.x, position\.y\)/);
+  assert.match(widget, /function dropTargetKey\(entry, zone\)/);
+  assert.match(widget, /root\.dropTargetKey\(topCard\.modelData, "top"\)/);
+  assert.match(page, /page\.galleryRoot\.dropTargetKey\(page\.entry, "bottom"\)/);
+  assert.match(widget, /const hitX = Math\.max\(x, clipX\)/);
+  assert.match(bridge, /root\.pointerX >= target\.hitX/);
+  assert.match(widget, /Component\.onDestruction: CrossMonitorDrag\.removeTarget/);
+  assert.match(page, /Component\.onDestruction: CrossMonitorDrag\.removeTarget/);
+  assert.match(window, /preventStealing: true/);
+  assert.match(window, /const targetWorkspace = dropTarget\?\.id \?\? -1/);
+  assert.match(gallery, /CrossMonitorDrag\.hoveredTarget\?\.id !== CrossMonitorDrag\.sourceWorkspaceId/);
+  const existingWorkspace = navigation.slice(
+    navigation.indexOf("} else {", navigation.indexOf("if (targetIsTrailing) {", navigation.indexOf("function commitWindowDrag"))),
+    navigation.indexOf("if (sourceIsEmptyAfterMove)", navigation.indexOf("function commitWindowDrag")));
+  assert.doesNotMatch(existingWorkspace, /hl\.dsp\.workspace\.move/);
+});
+
 test("same-workspace drags reorder tiled windows before release", () => {
   const gallery = read("Gallery.qml");
   const galleryWindow = read("GalleryWindow.qml");
@@ -334,7 +377,7 @@ test("Escape commits the selected workspace before closing the gallery", () => {
   const source = read("Gallery.qml");
   assert.match(source, /event\.key === Qt\.Key_Escape\) \{\s+galleryScope\.activateSelection\(\);/);
   assert.match(source, /function activateSelection\(\) \{\s+galleryScope\.close\(true\);/);
-  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose\) \{[\s\S]*WorkspaceNavigation\.commitWorkspaceForMonitor\(/);
+  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose && galleryScope\.closingWorkspaceId > 0\)[\s\S]*selections\[galleryScope\.closingMonitorName\] = galleryScope\.closingWorkspaceId/);
 });
 
 test("high-frequency swipe events do not refresh the workspace data model", () => {

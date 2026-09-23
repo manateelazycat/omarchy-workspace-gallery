@@ -287,6 +287,19 @@ Singleton {
             Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${id}", monitor = "${name}" })`);
     }
 
+    function commitGallerySelections(selections, focusedMonitorName) {
+        const selected = selections ?? {};
+        for (const name of Object.keys(selected)) {
+            const monitor = ServiceManager.workspace.monitors.find(mon => mon.name === name);
+            if (!monitor || ServiceManager.workspace.monitorActiveWorkspaceId(monitor) === Number(selected[name]))
+                continue;
+            root.commitWorkspaceForMonitor(name, selected[name]);
+        }
+        const focusName = String(focusedMonitorName ?? "");
+        if (focusName.length > 0)
+            Hyprland.dispatch(`hl.dsp.focus({monitor="${focusName}"})`);
+    }
+
     function luaQuoted(value) {
         return `"${String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
     }
@@ -607,8 +620,6 @@ Singleton {
         } else {
             if (!root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement))
                 return false;
-            if (targetMonitorName.length > 0)
-                Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${targetWorkspace}", monitor = "${targetMonitorName}" })`);
         }
 
         if (sourceIsEmptyAfterMove) {

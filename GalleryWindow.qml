@@ -147,6 +147,7 @@ OverviewWindow {
         cursorShape: Qt.PointingHandCursor
         drag.target: parent
         drag.threshold: 8
+        preventStealing: true
         enabled: root.interactionEnabled
 
         onEntered: root.hovered = true
@@ -179,20 +180,21 @@ OverviewWindow {
             root.pressed = true;
         }
 
-        onReleased: {
+        onReleased: mouse => {
             if (!root.pressed)
                 return;
             if (!root.Drag.active) {
                 root.pressed = false;
                 return;
             }
+            const point = dragArea.mapToItem(null, mouse.x, mouse.y);
+            CrossMonitorDrag.updatePointer(
+                root.galleryRoot.monitorOriginX + point.x,
+                root.galleryRoot.monitorOriginY + point.y);
             const dropTarget = CrossMonitorDrag.hoveredTarget;
-            const targetWorkspace = dropTarget?.id
-                ?? GlobalStates.overviewDraggingTargetWorkspace;
-            const targetIsTrailing = dropTarget?.isTrailing
-                ?? GlobalStates.overviewDraggingTargetIsTrailing;
-            const targetMonitor = dropTarget?.workspaceMonitorName
-                ?? GlobalStates.overviewDraggingTargetMonitor;
+            const targetWorkspace = dropTarget?.id ?? -1;
+            const targetIsTrailing = dropTarget?.isTrailing ?? false;
+            const targetMonitor = dropTarget?.workspaceMonitorName ?? "";
             const placement = root.placementForTarget(dropTarget);
             const layoutAlreadyCommitted = CrossMonitorDrag.liveReordered;
             CrossMonitorDrag.end();
@@ -207,6 +209,14 @@ OverviewWindow {
                 targetMonitor,
                 placement,
                 layoutAlreadyCommitted);
+        }
+
+        onCanceled: {
+            root.pressed = false;
+            root.Drag.active = false;
+            root.restorePositionBinding();
+            CrossMonitorDrag.end();
+            WorkspaceNavigation.resetOverviewDragState();
         }
 
         onClicked: event => {

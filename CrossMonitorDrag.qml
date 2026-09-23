@@ -2,11 +2,13 @@ pragma Singleton
 pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 // Bridges pointer state between the per-monitor overview surfaces. Qt's
 // Drag/DropArea pair is not reliable once a drag crosses a window boundary.
-// The source surface still receives pointer motion, so we resolve targets
-// ourselves in shared global logical coordinates.
+// Resolve targets in shared global logical coordinates. Poll the compositor
+// while dragging because the source surface can stop receiving motion when
+// the pointer crosses onto another monitor's layer surface.
 Singleton {
     id: root
 
@@ -31,6 +33,34 @@ Singleton {
         ? String(root.previewGrab.url ?? "")
         : ""
 
+    Timer {
+        interval: 40
+        repeat: true
+        running: root.active
+        onTriggered: {
+            if (!cursorProcess.running)
+                cursorProcess.running = true;
+        }
+    }
+
+    Process {
+        id: cursorProcess
+        command: ["hyprctl", "cursorpos", "-j"]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (!root.active)
+                    return;
+                try {
+                    const position = JSON.parse(text);
+                    if (Number.isFinite(position.x) && Number.isFinite(position.y))
+                        root.updatePointer(position.x, position.y);
+                } catch (error) {
+                    console.warn("[WorkspaceGallery] Failed to read cursor position:", error);
+                }
+            }
+        }
+    }
+
     function begin(address, workspaceId, monitorName, w, h, px, py, compact) {
         root.generation += 1;
         root.windowAddress = String(address ?? "");
@@ -49,13 +79,11 @@ Singleton {
         root.active = true;
     }
 
-    function publishTarget(surfaceMonitorName, workspaceMonitorName, workspaceId, isTrailing,
-            x, y, w, h, workX, workY, workW, workH) {
+    function publishTarget(key, surfaceMonitorName, workspaceMonitorName, workspaceId, isTrailing,
+            x, y, w, h, hitX, hitY, hitW, hitH, workX, workY, workW, workH) {
         if (!root.active || workspaceId === undefined || workspaceId === null)
             return;
         const next = Object.assign({}, root.targets);
-        // Include both monitor identities: trailing workspace IDs can repeat.
-        const key = `${surfaceMonitorName}:${workspaceMonitorName}:${workspaceId}`;
         next[key] = {
             id: workspaceId,
             isTrailing: isTrailing === true,
@@ -65,11 +93,23 @@ Singleton {
             y,
             w,
             h,
+            hitX,
+            hitY,
+            hitW,
+            hitH,
             workX,
             workY,
             workW,
             workH
         };
+        root.targets = next;
+    }
+
+    function removeTarget(key) {
+        if (!key || !root.targets[key])
+            return;
+        const next = Object.assign({}, root.targets);
+        delete next[key];
         root.targets = next;
     }
 
@@ -110,8 +150,8 @@ Singleton {
         const keys = Object.keys(root.targets);
         for (let i = 0; i < keys.length; ++i) {
             const target = root.targets[keys[i]];
-            if (root.pointerX >= target.x && root.pointerX <= target.x + target.w
-                && root.pointerY >= target.y && root.pointerY <= target.y + target.h)
+            if (root.pointerX >= target.hitX && root.pointerX <= target.hitX + target.hitW
+                && root.pointerY >= target.hitY && root.pointerY <= target.hitY + target.hitH)
                 return target;
         }
         return null;

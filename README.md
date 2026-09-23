@@ -25,7 +25,9 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
   order and monitor assignment are preserved.
 - The top 20% of the screen shows every workspace as a live thumbnail.
 - The bottom 80% shows the selected workspace at a larger scale.
-- Drag a window between the top thumbnails and the large preview to move it.
+- Leaving the gallery applies each monitor's selected workspace independently.
+- Drag a window between the top thumbnails and the large preview, including
+  across monitors, to move it into the workspace under the pointer.
 - Click a top workspace to select it; click a window in the large preview to focus it and leave the gallery.
 - While the gallery is open, press the left and right arrow keys or `H`/`L`
   to select workspaces. Press `Enter`, `Space`, or `Esc` to focus the selected

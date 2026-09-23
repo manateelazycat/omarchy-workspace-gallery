@@ -15,6 +15,7 @@ Item {
     signal monitorActivated(string monitorName)
 
     required property var screen
+    property bool closing: false
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
     readonly property var monitorData: ServiceManager.workspace.monitors.find(m => m.id === root.monitor?.id)
     readonly property real monitorOriginX: root.monitorData?.x ?? 0
@@ -44,6 +45,13 @@ Item {
         root.entries.findIndex(entry => entry.id === root.selectedWorkspaceId))
     readonly property bool ownsGesture: (root.monitor?.name ?? "")
         === GlobalStates.galleryActiveMonitorName
+
+    onClosingChanged: {
+        if (root.closing && root.swipeSettling) {
+            settleAnimation.stop();
+            root.finishSettlement();
+        }
+    }
 
     HoverHandler {
         onHoveredChanged: {
@@ -349,20 +357,48 @@ Item {
         root.closeRequested(true, workspaceId, windowData, root.monitor?.name ?? "");
     }
 
-    function registerDropTarget(item, entry) {
+    function dropTargetKey(entry, zone) {
+        return `${root.monitor?.name ?? ""}:${zone}:${entry?.monitorName ?? ""}:${entry?.id ?? -1}`;
+    }
+
+    function registerDropTarget(item, entry, zone) {
+        const key = root.dropTargetKey(entry, zone);
+        if (!CrossMonitorDrag.active || !entry || !item || item.width <= 0 || item.height <= 0) {
+            CrossMonitorDrag.removeTarget(key);
+            return;
+        }
         const point = item.mapToItem(null, 0, 0);
+        const viewport = zone === "top" ? topList : bottomViewport;
+        const clipPoint = viewport.mapToItem(null, 0, 0);
+        const x = root.monitorOriginX + point.x;
+        const y = root.monitorOriginY + point.y;
+        const clipX = root.monitorOriginX + clipPoint.x;
+        const clipY = root.monitorOriginY + clipPoint.y;
+        const hitX = Math.max(x, clipX);
+        const hitY = Math.max(y, clipY);
+        const hitRight = Math.min(x + item.width, clipX + viewport.width);
+        const hitBottom = Math.min(y + item.height, clipY + viewport.height);
+        if (hitRight <= hitX || hitBottom <= hitY) {
+            CrossMonitorDrag.removeTarget(key);
+            return;
+        }
         const targetMonitor = ServiceManager.workspace.monitors.find(
             monitor => monitor.name === (entry?.monitorName ?? "")) ?? root.monitorData;
         const reserved = targetMonitor?.reserved ?? [0, 0, 0, 0];
         CrossMonitorDrag.publishTarget(
+            key,
             root.monitor?.name ?? "",
             entry?.monitorName ?? "",
             entry?.id ?? -1,
             entry?.isTrailingEmpty ?? false,
-            root.monitorOriginX + point.x,
-            root.monitorOriginY + point.y,
+            x,
+            y,
             item.width,
             item.height,
+            hitX,
+            hitY,
+            hitRight - hitX,
+            hitBottom - hitY,
             (targetMonitor?.x ?? root.monitorOriginX) + (reserved[0] ?? 0),
             (targetMonitor?.y ?? root.monitorOriginY) + (reserved[1] ?? 0),
             root.usableLogicalWidth(targetMonitor),
@@ -452,6 +488,7 @@ Item {
             id: topCard
             required property var modelData
             required property int index
+            readonly property string dropTargetKey: root.dropTargetKey(topCard.modelData, "top")
             width: root.topCardWidth
             height: root.topCardHeight
             radius: 10
@@ -558,9 +595,21 @@ Item {
                 target: CrossMonitorDrag
                 function onActiveChanged() {
                     if (CrossMonitorDrag.active)
-                        root.registerDropTarget(topCard, topCard.modelData);
+                        root.registerDropTarget(topCard, topCard.modelData, "top");
                 }
             }
+            Connections {
+                target: topList
+                function onContentXChanged() {
+                    if (CrossMonitorDrag.active)
+                        root.registerDropTarget(topCard, topCard.modelData, "top");
+                }
+            }
+            Component.onCompleted: root.registerDropTarget(topCard, topCard.modelData, "top")
+            Component.onDestruction: CrossMonitorDrag.removeTarget(topCard.dropTargetKey)
+            onXChanged: root.registerDropTarget(topCard, topCard.modelData, "top")
+            onWidthChanged: root.registerDropTarget(topCard, topCard.modelData, "top")
+            onHeightChanged: root.registerDropTarget(topCard, topCard.modelData, "top")
         }
     }
 

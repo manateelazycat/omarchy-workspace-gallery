@@ -20,6 +20,18 @@ Rectangle {
     readonly property real singleWindowVerticalInset: page.windowAddresses.length === 1
         ? Math.max(12, Math.min(24, page.height * 0.035))
         : 0
+    readonly property string dropTargetKey: page.galleryRoot.dropTargetKey(page.entry, "bottom")
+
+    function refreshDropTarget() {
+        page.galleryRoot.registerDropTarget(page, page.entry, "bottom");
+    }
+
+    Component.onCompleted: page.refreshDropTarget()
+    Component.onDestruction: CrossMonitorDrag.removeTarget(page.dropTargetKey)
+    onXChanged: page.refreshDropTarget()
+    onYChanged: page.refreshDropTarget()
+    onWidthChanged: page.refreshDropTarget()
+    onHeightChanged: page.refreshDropTarget()
 
     radius: 12
     clip: true
@@ -98,7 +110,14 @@ Rectangle {
         target: CrossMonitorDrag
         function onActiveChanged() {
             if (CrossMonitorDrag.active && page.entry)
-                page.galleryRoot.registerDropTarget(page, page.entry);
+                page.refreshDropTarget();
+        }
+    }
+    Connections {
+        target: page.parent
+        function onXChanged() {
+            if (CrossMonitorDrag.active)
+                page.refreshDropTarget();
         }
     }
 }

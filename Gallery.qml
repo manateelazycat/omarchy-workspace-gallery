@@ -17,6 +17,7 @@ Scope {
     property bool commitSelectionAfterClose: false
     property int closingWorkspaceId: -1
     property string closingMonitorName: ""
+    property var closingSelectionByMonitor: ({})
     property var closingWindowData: null
     property real revealProgress: 0
 
@@ -48,6 +49,7 @@ Scope {
         galleryScope.commitSelectionAfterClose = false;
         galleryScope.closingWorkspaceId = -1;
         galleryScope.closingMonitorName = "";
+        galleryScope.closingSelectionByMonitor = ({});
         galleryScope.closingWindowData = null;
         const anchor = Hyprland.focusedMonitor?.name ?? "";
         galleryScope.lockedScreenName = anchor;
@@ -73,11 +75,15 @@ Scope {
         openAnimation.stop();
         galleryScope.commitSelectionAfterClose = commitSelection;
         galleryScope.closingMonitorName = monitorName || galleryScope.activeMonitorName();
+        galleryScope.closingWindowData = windowData;
+        galleryScope.closing = true;
         galleryScope.closingWorkspaceId = commitSelection
             ? (workspaceId > 0 ? workspaceId : galleryScope.selectedWorkspaceId(galleryScope.closingMonitorName))
             : -1;
-        galleryScope.closingWindowData = windowData;
-        galleryScope.closing = true;
+        const selections = Object.assign({}, GlobalStates.gallerySelectedWorkspaceByMonitor);
+        if (galleryScope.commitSelectionAfterClose && galleryScope.closingWorkspaceId > 0)
+            selections[galleryScope.closingMonitorName] = galleryScope.closingWorkspaceId;
+        galleryScope.closingSelectionByMonitor = selections;
         closeAnimation.restart();
     }
 
@@ -179,16 +185,16 @@ Scope {
         duration: 220
         easing.type: Easing.InCubic
         onFinished: {
-            if (galleryScope.commitSelectionAfterClose) {
-                WorkspaceNavigation.commitWorkspaceForMonitor(
-                    galleryScope.closingMonitorName, galleryScope.closingWorkspaceId);
-            }
+            WorkspaceNavigation.commitGallerySelections(
+                galleryScope.closingSelectionByMonitor,
+                galleryScope.closingMonitorName);
             const windowData = galleryScope.closingWindowData;
             GlobalStates.overviewOpen = false;
             galleryScope.closing = false;
             galleryScope.commitSelectionAfterClose = false;
             galleryScope.closingWorkspaceId = -1;
             galleryScope.closingMonitorName = "";
+            galleryScope.closingSelectionByMonitor = ({});
             galleryScope.closingWindowData = null;
             if (windowData)
                 Qt.callLater(() => WorkspaceNavigation.focusWindow(windowData));
@@ -208,7 +214,8 @@ Scope {
         if (!CrossMonitorDrag.active)
             return;
         const target = CrossMonitorDrag.hoveredWindowTarget;
-        if (!target || target.workspaceId !== CrossMonitorDrag.sourceWorkspaceId) {
+        if (!target || target.workspaceId !== CrossMonitorDrag.sourceWorkspaceId
+                || CrossMonitorDrag.hoveredTarget?.id !== CrossMonitorDrag.sourceWorkspaceId) {
             CrossMonitorDrag.liveSwapTargetAddress = "";
             return;
         }
@@ -302,6 +309,7 @@ Scope {
                     }
                     sourceComponent: GalleryWidget {
                         screen: panelWindow.screen
+                        closing: galleryScope.closing
                         onMonitorActivated: monitorName => galleryScope.activateMonitor(monitorName)
                         onCloseRequested: (commitSelection, workspaceId, windowData, monitorName) =>
                             galleryScope.close(commitSelection, workspaceId, windowData, monitorName)
