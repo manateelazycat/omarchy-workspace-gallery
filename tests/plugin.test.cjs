@@ -340,6 +340,23 @@ test("cross-monitor window drops track visible targets without moving an existin
   assert.doesNotMatch(existingWorkspace, /hl\.dsp\.workspace\.move/);
 });
 
+test("moving into an empty workspace assigns it to the destination monitor atomically", () => {
+  const navigation = read("WorkspaceNavigation.qml");
+  const placement = navigation.slice(
+    navigation.indexOf("function dispatchPlacedWindowMove("),
+    navigation.indexOf("function commitWindowDrag("));
+  const commit = navigation.slice(
+    navigation.indexOf("function commitWindowDrag("),
+    navigation.indexOf("function focusWindow("));
+
+  assert.match(commit, /const existingTargetWorkspace = ServiceManager\.workspace\.workspaceDataForId\(targetWorkspace\)/);
+  assert.match(commit, /const assignWorkspaceMonitor = targetWorkspace !== currentWorkspaceId\s+&& !existingTargetWorkspace/);
+  assert.match(placement, /const assignMonitor = assignWorkspaceMonitor && targetMonitorName\.length > 0/);
+  assert.match(placement, /\$\{move\}\s+\$\{assignMonitor\}/);
+  assert.match(commit, /placement, targetMonitorName, assignWorkspaceMonitor/);
+  assert.doesNotMatch(commit, /Hyprland\.dispatch\(`hl\.dsp\.workspace\.move/);
+});
+
 test("same-workspace drags reorder tiled windows before release", () => {
   const gallery = read("Gallery.qml");
   const galleryWindow = read("GalleryWindow.qml");

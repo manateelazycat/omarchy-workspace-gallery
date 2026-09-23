@@ -534,12 +534,19 @@ Singleton {
         return true;
     }
 
-    function dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement) {
+    function dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement,
+            targetMonitorName = "", assignWorkspaceMonitor = false) {
         const move = `hl.dispatch(hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" }))`;
+        const assignMonitor = assignWorkspaceMonitor && targetMonitorName.length > 0
+            ? `hl.dispatch(hl.dsp.workspace.move({ workspace = "${targetWorkspace}", monitor = ${root.luaQuoted(targetMonitorName)} }))`
+            : "";
         if (!placement || !Number.isFinite(placement.dropX) || !Number.isFinite(placement.dropY)) {
             if (targetWorkspace === currentWorkspaceId)
                 return false;
-            Hyprland.dispatch(`hl.dsp.window.move({ workspace = ${targetWorkspace}, follow = false, window = "address:${windowAddress}" })`);
+            Hyprland.dispatch(`function()
+                ${move}
+                ${assignMonitor}
+            end`);
             return true;
         }
 
@@ -567,6 +574,7 @@ Singleton {
         Hyprland.dispatch(`function()
             hl.dispatch(hl.dsp.cursor.move({ x = ${dropX}, y = ${dropY} }))
             ${move}
+            ${assignMonitor}
             hl.dispatch(hl.dsp.cursor.move({ x = ${restoreX}, y = ${restoreY} }))
         end`);
         return true;
@@ -595,6 +603,12 @@ Singleton {
         // IDs of trailing cards may repeat per monitor. The caller resolves the
         // owning monitor from the rendered card before reaching this function.
         const targetMonitorName = String(targetMonitorHint ?? "");
+        const existingTargetWorkspace = ServiceManager.workspace.workspaceDataForId(targetWorkspace);
+        if (existingTargetWorkspace?.monitor && targetMonitorName.length > 0
+                && existingTargetWorkspace.monitor !== targetMonitorName)
+            return false;
+        const assignWorkspaceMonitor = targetWorkspace !== currentWorkspaceId
+            && !existingTargetWorkspace;
 
         GlobalStates.setPendingWindowWorkspace(windowAddress, targetWorkspace);
 
@@ -614,11 +628,11 @@ Singleton {
                 sourceWorkspaceId: currentWorkspaceId
             });
             GlobalStates.overviewPendingOccupiedWorkspaces = filtered;
-            root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement);
-            if (targetMonitorName.length > 0)
-                Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${targetWorkspace}", monitor = "${targetMonitorName}" })`);
+            root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace,
+                placement, targetMonitorName, assignWorkspaceMonitor);
         } else {
-            if (!root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace, placement))
+            if (!root.dispatchPlacedWindowMove(windowAddress, currentWorkspaceId, targetWorkspace,
+                    placement, targetMonitorName, assignWorkspaceMonitor))
                 return false;
         }
 
