@@ -63,6 +63,9 @@ qmllint -I "${OMARCHY_PATH:-/usr/share/omarchy}/shell" \
   Gallery.qml GalleryWidget.qml GalleryWindow.qml OverviewWindow.qml
 ```
 
+After syncing local changes into an installed plugin, run `omarchy restart shell`.
+Hot reload can leave an already open gallery using its previous QML components.
+
 ## Credits
 
 The live preview, Hyprland data model, wallpaper integration, and drag-and-drop foundations are adapted from [Overview Workspaces](https://github.com/iamcheyan/omarchy-overview-workspaces) by HANCORE, licensed under MIT. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

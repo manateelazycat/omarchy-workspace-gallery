@@ -39,6 +39,8 @@ Singleton {
     // widget entry in shell.json, the same way overviewSortMode is.
     property bool overviewPerMonitor: true
     property int overviewFocusedWorkspaceId: -1
+    property var gallerySelectedWorkspaceByMonitor: ({})
+    property string galleryActiveMonitorName: ""
     property var overviewWorkspaceMru: []
     property int overviewCurrentWorkspaceId: -1
     property int overviewPreviousWorkspaceId: -1

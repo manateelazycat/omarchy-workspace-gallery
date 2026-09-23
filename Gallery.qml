@@ -16,15 +16,30 @@ Scope {
     property bool closing: false
     property bool commitSelectionAfterClose: false
     property int closingWorkspaceId: -1
+    property string closingMonitorName: ""
     property var closingWindowData: null
     property real revealProgress: 0
-    property var focusedScreen: Quickshell.screens.find(
-        screen => screen.name === (galleryScope.lockedScreenName || Hyprland.focusedMonitor?.name))
-        ?? Quickshell.screens[0]
-        ?? null
 
-    function currentWorkspaceId() {
-        return WorkspaceNavigation.currentWorkspaceId();
+    function activeMonitorName() {
+        return GlobalStates.galleryActiveMonitorName
+            || galleryScope.lockedScreenName
+            || Hyprland.focusedMonitor?.name
+            || "";
+    }
+
+    function selectedWorkspaceId(monitorName) {
+        const name = monitorName || galleryScope.activeMonitorName();
+        const selected = GlobalStates.gallerySelectedWorkspaceByMonitor[name];
+        if (selected > 0)
+            return selected;
+        const monitor = ServiceManager.workspace.monitors.find(mon => mon.name === name)
+            ?? Hyprland.monitors.find(mon => mon.name === name);
+        return ServiceManager.workspace.monitorActiveWorkspaceId(monitor) || 1;
+    }
+
+    function activateMonitor(monitorName) {
+        if (monitorName)
+            GlobalStates.galleryActiveMonitorName = monitorName;
     }
 
     function open(payload) {
@@ -32,24 +47,34 @@ Scope {
         galleryScope.closing = false;
         galleryScope.commitSelectionAfterClose = false;
         galleryScope.closingWorkspaceId = -1;
+        galleryScope.closingMonitorName = "";
         galleryScope.closingWindowData = null;
         const anchor = Hyprland.focusedMonitor?.name ?? "";
         galleryScope.lockedScreenName = anchor;
         GlobalStates.overviewAnchorMonitorName = anchor;
-        GlobalStates.overviewFocusedWorkspaceId = galleryScope.currentWorkspaceId();
+        GlobalStates.galleryActiveMonitorName = anchor;
+        const selected = {};
+        for (const screen of Quickshell.screens) {
+            const monitor = Hyprland.monitorFor(screen);
+            if (monitor?.name)
+                selected[monitor.name] = ServiceManager.workspace.monitorActiveWorkspaceId(monitor) || 1;
+        }
+        GlobalStates.gallerySelectedWorkspaceByMonitor = selected;
+        GlobalStates.overviewFocusedWorkspaceId = galleryScope.selectedWorkspaceId(anchor);
         GlobalStates.overviewOpen = true;
         galleryScope.revealProgress = 0;
         openAnimation.restart();
     }
 
-    function close(commitSelection = false, workspaceId = -1, windowData = null) {
+    function close(commitSelection = false, workspaceId = -1, windowData = null, monitorName = "") {
         if (!GlobalStates.overviewOpen || galleryScope.closing)
             return;
         GlobalStates.gallerySwipeFinished(true, 0);
         openAnimation.stop();
         galleryScope.commitSelectionAfterClose = commitSelection;
+        galleryScope.closingMonitorName = monitorName || galleryScope.activeMonitorName();
         galleryScope.closingWorkspaceId = commitSelection
-            ? (workspaceId > 0 ? workspaceId : GlobalStates.overviewFocusedWorkspaceId)
+            ? (workspaceId > 0 ? workspaceId : galleryScope.selectedWorkspaceId(galleryScope.closingMonitorName))
             : -1;
         galleryScope.closingWindowData = windowData;
         galleryScope.closing = true;
@@ -155,15 +180,15 @@ Scope {
         easing.type: Easing.InCubic
         onFinished: {
             if (galleryScope.commitSelectionAfterClose) {
-                if (galleryScope.closingWorkspaceId > 0)
-                    GlobalStates.overviewFocusedWorkspaceId = galleryScope.closingWorkspaceId;
-                WorkspaceNavigation.commitSelectedWorkspace();
+                WorkspaceNavigation.commitWorkspaceForMonitor(
+                    galleryScope.closingMonitorName, galleryScope.closingWorkspaceId);
             }
             const windowData = galleryScope.closingWindowData;
             GlobalStates.overviewOpen = false;
             galleryScope.closing = false;
             galleryScope.commitSelectionAfterClose = false;
             galleryScope.closingWorkspaceId = -1;
+            galleryScope.closingMonitorName = "";
             galleryScope.closingWindowData = null;
             if (windowData)
                 Qt.callLater(() => WorkspaceNavigation.focusWindow(windowData));
@@ -175,14 +200,8 @@ Scope {
             Hyprland.dispatch("hl.dsp.window.close()");
             return;
         }
-        const workspaceId = GlobalStates.overviewFocusedWorkspaceId > 0
-            ? GlobalStates.overviewFocusedWorkspaceId
-            : galleryScope.currentWorkspaceId();
+        const workspaceId = galleryScope.selectedWorkspaceId(galleryScope.activeMonitorName());
         WorkspaceNavigation.closeMostRecentWindowInWorkspace(workspaceId);
-    }
-
-    function isFocusedScreen(screen) {
-        return screen?.name === galleryScope.focusedScreen?.name;
     }
 
     function updateLiveWindowDrag() {
@@ -218,6 +237,8 @@ Scope {
             GlobalStates.overviewPendingWorkspaceMonitorById = ({});
             GlobalStates.overviewPendingOccupiedWorkspaces = [];
             GlobalStates.overviewFocusedWorkspaceId = -1;
+            GlobalStates.gallerySelectedWorkspaceByMonitor = ({});
+            GlobalStates.galleryActiveMonitorName = "";
             galleryScope.lockedScreenName = "";
             GlobalStates.overviewAnchorMonitorName = "";
         }
@@ -255,9 +276,8 @@ Scope {
 
                 WlrLayershell.namespace: "omarchy-workspace-gallery"
                 WlrLayershell.layer: WlrLayer.Overlay
-                WlrLayershell.keyboardFocus: galleryScope.isFocusedScreen(panelWindow.screen)
-                    && GlobalStates.overviewOpen && !galleryScope.closing
-                    ? WlrKeyboardFocus.Exclusive
+                WlrLayershell.keyboardFocus: GlobalStates.overviewOpen && !galleryScope.closing
+                    ? WlrKeyboardFocus.OnDemand
                     : WlrKeyboardFocus.None
 
                 anchors {
@@ -282,16 +302,18 @@ Scope {
                     }
                     sourceComponent: GalleryWidget {
                         screen: panelWindow.screen
-                        onCloseRequested: (commitSelection, workspaceId, windowData) =>
-                            galleryScope.close(commitSelection, workspaceId, windowData)
+                        onMonitorActivated: monitorName => galleryScope.activateMonitor(monitorName)
+                        onCloseRequested: (commitSelection, workspaceId, windowData, monitorName) =>
+                            galleryScope.close(commitSelection, workspaceId, windowData, monitorName)
                     }
                 }
 
                 Item {
                     anchors.fill: parent
-                    focus: galleryScope.isFocusedScreen(panelWindow.screen)
+                    focus: true
 
                     Keys.onPressed: event => {
+                        galleryScope.activateMonitor(panelWindow.screen?.name ?? "");
                         if (event.key === Qt.Key_Escape) {
                             galleryScope.activateSelection();
                             event.accepted = true;

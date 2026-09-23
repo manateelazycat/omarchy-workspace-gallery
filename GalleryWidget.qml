@@ -11,7 +11,8 @@ import "ColorUtils.js" as ColorUtils
 Item {
     id: root
 
-    signal closeRequested(bool commitSelection, int workspaceId, var windowData)
+    signal closeRequested(bool commitSelection, int workspaceId, var windowData, string monitorName)
+    signal monitorActivated(string monitorName)
 
     required property var screen
     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.screen)
@@ -34,16 +35,22 @@ Item {
             : (ServiceManager.workspace.overviewWorkspaceEntries ?? []);
     }
     readonly property var entryIds: root.entries.map(entry => entry.id)
-    readonly property int selectedWorkspaceId: GlobalStates.overviewFocusedWorkspaceId > 0
-        ? GlobalStates.overviewFocusedWorkspaceId
-        : Math.max(1, root.monitor?.activeWorkspace?.id ?? 1)
+    readonly property int selectedWorkspaceId: GlobalStates.gallerySelectedWorkspaceByMonitor[root.monitor?.name ?? ""]
+        ?? Math.max(1, root.monitor?.activeWorkspace?.id ?? 1)
     readonly property var selectedEntry: root.entries.find(entry => entry.id === root.selectedWorkspaceId)
         ?? root.entries[0]
         ?? null
     readonly property int selectedIndex: Math.max(0,
         root.entries.findIndex(entry => entry.id === root.selectedWorkspaceId))
     readonly property bool ownsGesture: (root.monitor?.name ?? "")
-        === GlobalStates.overviewAnchorMonitorName
+        === GlobalStates.galleryActiveMonitorName
+
+    HoverHandler {
+        onHoveredChanged: {
+            if (hovered && root.monitor?.name)
+                root.monitorActivated(root.monitor.name);
+        }
+    }
 
     readonly property real topHeight: height * 0.20
     readonly property real bottomY: topHeight
@@ -187,10 +194,17 @@ Item {
         });
     }
 
-    function selectWorkspace(workspaceId) {
+    function selectWorkspace(workspaceId, activateInput = true) {
         if (workspaceId < 1)
             return;
-        GlobalStates.overviewFocusedWorkspaceId = workspaceId;
+        const monitorName = root.monitor?.name ?? "";
+        if (!monitorName || !root.entries.some(entry => entry.id === workspaceId))
+            return;
+        if (activateInput)
+            GlobalStates.galleryActiveMonitorName = monitorName;
+        GlobalStates.gallerySelectedWorkspaceByMonitor = Object.assign({},
+            GlobalStates.gallerySelectedWorkspaceByMonitor,
+            { [monitorName]: workspaceId });
         const index = root.entries.findIndex(entry => entry.id === workspaceId);
         if (index >= 0)
             topList.positionViewAtIndex(index, ListView.Contain);
@@ -200,6 +214,7 @@ Item {
         const targetIndex = root.entries.findIndex(entry => entry.id === workspaceId);
         if (targetIndex < 0)
             return;
+        root.monitorActivated(root.monitor?.name ?? "");
         if (targetIndex === root.selectedIndex) {
             root.selectWorkspace(workspaceId);
             return;
@@ -326,12 +341,12 @@ Item {
 
     function activateWorkspace(workspaceId) {
         root.selectWorkspace(workspaceId);
-        root.closeRequested(true, workspaceId, null);
+        root.closeRequested(true, workspaceId, null, root.monitor?.name ?? "");
     }
 
     function activateWindow(windowData, workspaceId) {
         root.selectWorkspace(workspaceId);
-        root.closeRequested(true, workspaceId, windowData);
+        root.closeRequested(true, workspaceId, windowData, root.monitor?.name ?? "");
     }
 
     function registerDropTarget(item, entry) {
@@ -358,7 +373,7 @@ Item {
         if (!root.entries.some(entry => entry.id === root.selectedWorkspaceId)) {
             const fallback = root.entries.find(entry => !entry.isTrailingEmpty) ?? root.entries[0];
             if (fallback)
-                root.selectWorkspace(fallback.id);
+                root.selectWorkspace(fallback.id, false);
         }
     }
 
@@ -430,6 +445,8 @@ Item {
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         model: root.entries
+        Component.onCompleted: topList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
+        onCountChanged: topList.positionViewAtIndex(root.selectedIndex, ListView.Contain)
 
         delegate: Rectangle {
             id: topCard

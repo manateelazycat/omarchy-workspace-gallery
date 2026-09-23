@@ -271,6 +271,22 @@ Singleton {
             root.dispatchFocusWorkspace(GlobalStates.overviewFocusedWorkspaceId);
     }
 
+    function commitWorkspaceForMonitor(monitorName, workspaceId) {
+        const name = String(monitorName ?? "");
+        const id = Number(workspaceId);
+        if (!name || id < 1)
+            return;
+        const entries = ServiceManager.workspace.overviewWorkspaceEntriesForMonitor(
+            name, true, {}, true, true);
+        const entry = entries.find(candidate => candidate.id === id);
+        if (!entry)
+            return;
+        Hyprland.dispatch(`hl.dsp.focus({monitor="${name}"})`);
+        Hyprland.dispatch(`hl.dsp.focus({ workspace = ${id} })`);
+        if (entry.isTrailingEmpty)
+            Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${id}", monitor = "${name}" })`);
+    }
+
     function luaQuoted(value) {
         return `"${String(value ?? "").replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
     }
@@ -384,6 +400,11 @@ Singleton {
         GlobalStates.overviewSuppressedEmptyWorkspaceIds = suppressed;
         GlobalStates.overviewFocusedWorkspaceId = root.remapWorkspaceId(
             GlobalStates.overviewFocusedWorkspaceId, plan.mapping);
+        const gallerySelections = {};
+        for (const [monitorName, workspaceId] of Object.entries(
+                GlobalStates.gallerySelectedWorkspaceByMonitor ?? {}))
+            gallerySelections[monitorName] = root.remapWorkspaceId(workspaceId, plan.mapping);
+        GlobalStates.gallerySelectedWorkspaceByMonitor = gallerySelections;
         GlobalStates.overviewCurrentWorkspaceId = root.remapWorkspaceId(
             GlobalStates.overviewCurrentWorkspaceId, plan.mapping);
         GlobalStates.overviewPreviousWorkspaceId = root.remapWorkspaceId(

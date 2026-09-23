@@ -51,13 +51,13 @@ test("Super+A toggles the gallery and arrow keys select workspaces", () => {
 test("all gallery close paths use a progressive exit animation", () => {
   const gallery = read("Gallery.qml");
   const widget = read("GalleryWidget.qml");
-  assert.match(gallery, /function close\(commitSelection = false, workspaceId = -1, windowData = null\)/);
+  assert.match(gallery, /function close\(commitSelection = false, workspaceId = -1, windowData = null, monitorName = ""\)/);
   assert.match(gallery, /id: closeAnimation[\s\S]*property: "revealProgress"[\s\S]*duration: 220/);
   assert.match(gallery, /visible: GlobalStates\.overviewOpen \|\| galleryScope\.closing/);
   assert.match(gallery, /opacity: galleryScope\.revealProgress/);
   assert.match(gallery, /y: \(1 - galleryScope\.revealProgress\) \* 28/);
   assert.match(gallery, /galleryScope\.close\(true\)/);
-  assert.match(widget, /signal closeRequested\(bool commitSelection, int workspaceId, var windowData\)/);
+  assert.match(widget, /signal closeRequested\(bool commitSelection, int workspaceId, var windowData, string monitorName\)/);
 });
 
 test("clicking the large preview commits the workspace under the pointer", () => {
@@ -72,13 +72,30 @@ test("clicking the large preview commits the workspace under the pointer", () =>
 
   assert.match(page, /MouseArea\s*\{[\s\S]*onClicked:[\s\S]*activateWorkspace\(page\.entry\.id\)/);
   assert.match(page, /onActivated: windowData => page\.galleryRoot\.activateWindow\(windowData, page\.entry\.id\)/);
-  assert.match(activateWorkspace, /root\.selectWorkspace\(workspaceId\)[\s\S]*root\.closeRequested\(true, workspaceId, null\)/);
+  assert.match(activateWorkspace, /root\.selectWorkspace\(workspaceId\)[\s\S]*root\.closeRequested\(true, workspaceId, null, root\.monitor\?\.name \?\? ""\)/);
   assert.match(activateWindow, /root\.selectWorkspace\(workspaceId\)/);
-  assert.match(activateWindow, /root\.closeRequested\(true, workspaceId, windowData\)/);
+  assert.match(activateWindow, /root\.closeRequested\(true, workspaceId, windowData, root\.monitor\?\.name \?\? ""\)/);
   const gallery = read("Gallery.qml");
-  assert.match(gallery, /galleryScope\.closingWorkspaceId = commitSelection[\s\S]*workspaceId > 0 \? workspaceId : GlobalStates\.overviewFocusedWorkspaceId/);
-  assert.match(gallery, /GlobalStates\.overviewFocusedWorkspaceId = galleryScope\.closingWorkspaceId;[\s\S]*WorkspaceNavigation\.commitSelectedWorkspace\(\)/);
+  assert.match(gallery, /galleryScope\.closingWorkspaceId = commitSelection[\s\S]*galleryScope\.selectedWorkspaceId\(galleryScope\.closingMonitorName\)/);
+  assert.match(gallery, /WorkspaceNavigation\.commitWorkspaceForMonitor\([\s\S]*galleryScope\.closingMonitorName, galleryScope\.closingWorkspaceId\)/);
   assert.match(gallery, /GlobalStates\.overviewOpen = false;[\s\S]*Qt\.callLater\(\(\) => WorkspaceNavigation\.focusWindow\(windowData\)\)/);
+});
+
+test("each gallery monitor keeps its own selected workspace and keyboard target", () => {
+  const gallery = read("Gallery.qml");
+  const widget = read("GalleryWidget.qml");
+  const navigation = read("WorkspaceNavigation.qml");
+  assert.match(gallery, /for \(const screen of Quickshell\.screens\)[\s\S]*selected\[monitor\.name\] = ServiceManager\.workspace\.monitorActiveWorkspaceId\(monitor\)/);
+  assert.match(widget, /selectedWorkspaceId: GlobalStates\.gallerySelectedWorkspaceByMonitor\[root\.monitor\?\.name \?\? ""\]/);
+  assert.match(widget, /GlobalStates\.gallerySelectedWorkspaceByMonitor = Object\.assign\(\{\},[\s\S]*\{ \[monitorName\]: workspaceId \}\)/);
+  assert.match(widget, /onHoveredChanged:[\s\S]*root\.monitorActivated\(root\.monitor\.name\)/);
+  assert.match(widget, /function animateToWorkspace\(workspaceId\)[\s\S]*root\.monitorActivated\(root\.monitor\?\.name \?\? ""\)/);
+  assert.match(widget, /ownsGesture:[\s\S]*GlobalStates\.galleryActiveMonitorName/);
+  assert.match(gallery, /WlrLayershell\.keyboardFocus: GlobalStates\.overviewOpen && !galleryScope\.closing[\s\S]*WlrKeyboardFocus\.OnDemand/);
+  assert.match(gallery, /Keys\.onPressed: event => \{\s+galleryScope\.activateMonitor\(panelWindow\.screen\?\.name \?\? ""\)/);
+  assert.match(widget, /root\.selectWorkspace\(fallback\.id, false\)/);
+  assert.match(navigation, /function commitWorkspaceForMonitor\(monitorName, workspaceId\)[\s\S]*overviewWorkspaceEntriesForMonitor\([\s\S]*name, true/);
+  assert.doesNotMatch(widget, /GlobalStates\.overviewFocusedWorkspaceId/);
 });
 
 test("Super+W closes the latest window from the workspace selected in the gallery", () => {
@@ -89,7 +106,7 @@ test("Super+W closes the latest window from the workspace selected in the galler
   assert.match(config, /hl\.unbind\("SUPER \+ W"\)/);
   assert.match(config, /hl\.bind\("SUPER \+ W", hl\.dsp\.global\("quickshell:workspaceGalleryCloseWindow"\)/);
   assert.match(gallery, /name: "workspaceGalleryCloseWindow"[\s\S]*galleryScope\.closeSelectedWorkspaceWindow\(\)/);
-  assert.match(gallery, /GlobalStates\.overviewFocusedWorkspaceId[\s\S]*WorkspaceNavigation\.closeMostRecentWindowInWorkspace\(workspaceId\)/);
+  assert.match(gallery, /galleryScope\.selectedWorkspaceId\(galleryScope\.activeMonitorName\(\)\)[\s\S]*WorkspaceNavigation\.closeMostRecentWindowInWorkspace\(workspaceId\)/);
   assert.match(gallery, /if \(!GlobalStates\.overviewOpen\)[\s\S]*hl\.dsp\.window\.close\(\)/);
   assert.match(navigation, /WorkspaceWindowSelection\.mostRecentClientForWorkspace/);
 });
@@ -317,7 +334,7 @@ test("Escape commits the selected workspace before closing the gallery", () => {
   const source = read("Gallery.qml");
   assert.match(source, /event\.key === Qt\.Key_Escape\) \{\s+galleryScope\.activateSelection\(\);/);
   assert.match(source, /function activateSelection\(\) \{\s+galleryScope\.close\(true\);/);
-  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose\) \{[\s\S]*WorkspaceNavigation\.commitSelectedWorkspace\(\);/);
+  assert.match(source, /if \(galleryScope\.commitSelectionAfterClose\) \{[\s\S]*WorkspaceNavigation\.commitWorkspaceForMonitor\(/);
 });
 
 test("high-frequency swipe events do not refresh the workspace data model", () => {
