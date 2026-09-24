@@ -45,7 +45,7 @@ Rectangle {
         fillMode: Image.PreserveAspectCrop
         asynchronous: false
         cache: true
-        opacity: page.entry?.isTrailingEmpty ? 0.58 : 0.9
+        opacity: 1
     }
 
     Rectangle {

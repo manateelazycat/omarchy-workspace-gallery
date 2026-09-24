@@ -127,11 +127,8 @@ Singleton {
             const anchor = GlobalStates.overviewAnchorMonitorName
                 || Hyprland.focusedMonitor?.name
                 || "";
-            if (anchor.length > 0) {
-                const scoped = ServiceManager.workspace.overviewWorkspaceEntriesForMonitor(anchor, true, {}, true, true);
-                if (scoped.length > 0)
-                    return scoped;
-            }
+            if (anchor.length > 0)
+                return ServiceManager.workspace.galleryWorkspaceEntriesForMonitor(anchor);
         }
         return ServiceManager.workspace.overviewWorkspaceEntriesGroupedByMonitor();
     }
@@ -276,8 +273,7 @@ Singleton {
         const id = Number(workspaceId);
         if (!name || id < 1)
             return;
-        const entries = ServiceManager.workspace.overviewWorkspaceEntriesForMonitor(
-            name, true, {}, true, true);
+        const entries = ServiceManager.workspace.galleryWorkspaceEntriesForMonitor(name);
         const entry = entries.find(candidate => candidate.id === id);
         if (!entry)
             return;

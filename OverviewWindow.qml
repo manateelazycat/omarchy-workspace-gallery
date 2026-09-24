@@ -12,6 +12,7 @@ Item { // Window
     property var toplevel
     property var windowData
     property bool captureActive: true
+    property url staticSnapshotUrl: ""
     property var monitorData
     property var scale
     property real scaleX: scale * widthRatio
@@ -177,6 +178,7 @@ Item { // Window
     property url freezeUrl: ""
     property var captureToplevel: null
     readonly property bool anyPreviewContent: preview0.hasContent || preview1.hasContent
+        || staticSnapshot.status === Image.Ready
     readonly property bool showingFreeze: !root.anyPreviewContent && root.freezeUrl != ""
 
     function rememberToplevel() {
@@ -334,6 +336,17 @@ Item { // Window
                 if (root.frontSlot === 1)
                     root.recaptureNow();
             }
+        }
+
+        Image {
+            id: staticSnapshot
+            anchors.fill: parent
+            source: root.staticSnapshotUrl
+            visible: status === Image.Ready
+            fillMode: Image.PreserveAspectFit
+            asynchronous: false
+            cache: true
+            smooth: true
         }
     }
 

@@ -19,6 +19,10 @@ Scope {
     property string closingMonitorName: ""
     property var closingSelectionByMonitor: ({})
     property var closingWindowData: null
+    property var openingWindowData: null
+    property var closingRestoreWindowData: null
+    property bool selectionTouched: false
+    property bool openReady: false
     property real revealProgress: 0
 
     function activeMonitorName() {
@@ -51,6 +55,15 @@ Scope {
         galleryScope.closingMonitorName = "";
         galleryScope.closingSelectionByMonitor = ({});
         galleryScope.closingWindowData = null;
+        galleryScope.closingRestoreWindowData = null;
+        const nativeAddress = Hyprland.activeToplevel?.HyprlandToplevel?.address
+            || Hyprland.activeToplevel?.address;
+        const address = ServiceManager.workspace.normalizeAddress(
+            nativeAddress || ServiceManager.workspace.activeWindow?.address);
+        galleryScope.openingWindowData = address.length > 0
+            ? { address, workspace: { id: Hyprland.focusedWorkspace?.id ?? -1 } }
+            : null;
+        galleryScope.selectionTouched = false;
         const anchor = Hyprland.focusedMonitor?.name ?? "";
         galleryScope.lockedScreenName = anchor;
         GlobalStates.overviewAnchorMonitorName = anchor;
@@ -63,16 +76,16 @@ Scope {
         }
         GlobalStates.gallerySelectedWorkspaceByMonitor = selected;
         GlobalStates.overviewFocusedWorkspaceId = galleryScope.selectedWorkspaceId(anchor);
+        WindowSnapshots.prepare();
+        galleryScope.openReady = WindowSnapshots.ready;
         GlobalStates.overviewOpen = true;
-        galleryScope.revealProgress = 0;
-        openAnimation.restart();
+        galleryScope.revealProgress = galleryScope.openReady ? 1 : 0;
     }
 
     function close(commitSelection = false, workspaceId = -1, windowData = null, monitorName = "") {
         if (!GlobalStates.overviewOpen || galleryScope.closing)
             return;
         GlobalStates.gallerySwipeFinished(true, 0);
-        openAnimation.stop();
         galleryScope.commitSelectionAfterClose = commitSelection;
         galleryScope.closingMonitorName = monitorName || galleryScope.activeMonitorName();
         galleryScope.closingWindowData = windowData;
@@ -84,6 +97,11 @@ Scope {
         if (galleryScope.commitSelectionAfterClose && galleryScope.closingWorkspaceId > 0)
             selections[galleryScope.closingMonitorName] = galleryScope.closingWorkspaceId;
         galleryScope.closingSelectionByMonitor = selections;
+        if (!commitSelection && !galleryScope.selectionTouched) {
+            galleryScope.closingSelectionByMonitor = ({});
+            galleryScope.closingMonitorName = "";
+            galleryScope.closingRestoreWindowData = galleryScope.openingWindowData;
+        }
         closeAnimation.restart();
     }
 
@@ -168,13 +186,15 @@ Scope {
         galleryScope.close(true);
     }
 
-    NumberAnimation {
-        id: openAnimation
-        target: galleryScope
-        property: "revealProgress"
-        to: 1
-        duration: 240
-        easing.type: Easing.OutCubic
+    Connections {
+        target: WindowSnapshots
+        function onReadyChanged() {
+            if (WindowSnapshots.ready && GlobalStates.overviewOpen
+                    && !galleryScope.closing && !galleryScope.openReady) {
+                galleryScope.openReady = true;
+                galleryScope.revealProgress = 1;
+            }
+        }
     }
 
     NumberAnimation {
@@ -189,6 +209,8 @@ Scope {
                 galleryScope.closingSelectionByMonitor,
                 galleryScope.closingMonitorName);
             const windowData = galleryScope.closingWindowData;
+            const restoreWindowData = galleryScope.closingRestoreWindowData;
+            const restoreMonitorName = galleryScope.lockedScreenName;
             GlobalStates.overviewOpen = false;
             galleryScope.closing = false;
             galleryScope.commitSelectionAfterClose = false;
@@ -196,8 +218,16 @@ Scope {
             galleryScope.closingMonitorName = "";
             galleryScope.closingSelectionByMonitor = ({});
             galleryScope.closingWindowData = null;
+            galleryScope.closingRestoreWindowData = null;
+            galleryScope.openingWindowData = null;
+            galleryScope.selectionTouched = false;
+            galleryScope.openReady = false;
             if (windowData)
                 Qt.callLater(() => WorkspaceNavigation.focusWindow(windowData));
+            else if (restoreWindowData)
+                Qt.callLater(() => WorkspaceNavigation.focusWindow(restoreWindowData));
+            else if (restoreMonitorName)
+                Qt.callLater(() => Hyprland.dispatch(`hl.dsp.focus({monitor=${WorkspaceNavigation.luaQuoted(restoreMonitorName)}})`));
         }
     }
 
@@ -277,8 +307,9 @@ Scope {
             component: PanelWindow {
                 id: panelWindow
                 screen: panelLoader.modelData
-                visible: GlobalStates.overviewOpen || galleryScope.closing
-                color: "transparent"
+                visible: (GlobalStates.overviewOpen || galleryScope.closing)
+                    && galleryScope.openReady && galleryLoader.status === Loader.Ready
+                color: Qt.rgba(TuiStyle.bg.r, TuiStyle.bg.g, TuiStyle.bg.b, 1)
                 exclusionMode: ExclusionMode.Ignore
 
                 WlrLayershell.namespace: "omarchy-workspace-gallery"
@@ -297,8 +328,10 @@ Scope {
                 Loader {
                     id: galleryLoader
                     anchors.fill: parent
-                    active: GlobalStates.overviewOpen || galleryScope.closing
-                    asynchronous: false
+                    // Build the four monitor views while the panel is hidden.
+                    // A ready snapshot set can then appear in one frame.
+                    active: true
+                    asynchronous: true
                     opacity: galleryScope.revealProgress
                     y: (1 - galleryScope.revealProgress) * 28
                     transform: Scale {
@@ -311,6 +344,7 @@ Scope {
                         screen: panelWindow.screen
                         closing: galleryScope.closing
                         onMonitorActivated: monitorName => galleryScope.activateMonitor(monitorName)
+                        onWorkspaceSelected: monitorName => galleryScope.selectionTouched = true
                         onCloseRequested: (commitSelection, workspaceId, windowData, monitorName) =>
                             galleryScope.close(commitSelection, workspaceId, windowData, monitorName)
                     }

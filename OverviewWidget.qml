@@ -52,10 +52,8 @@ Item {
         const name = root.monitor?.name ?? "";
         if (name.length === 0)
             return all;
-        const own = ServiceManager.workspace.overviewWorkspaceEntriesForMonitor(name, true, {}, true, true) ?? [];
-        // If Hyprland has not reported this monitor yet, showing everything beats
-        // leaving the screen blank.
-        return own.length > 0 ? own : all;
+        const own = ServiceManager.workspace.galleryWorkspaceEntriesForMonitor(name) ?? [];
+        return own;
     }
     readonly property var overviewEntryIds: (root.overviewEntries ?? []).map(entry => entry.id)
     readonly property var monitorGroups: {

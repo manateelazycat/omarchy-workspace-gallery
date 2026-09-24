@@ -5,6 +5,16 @@ const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
 const read = name => fs.readFileSync(path.join(root, name), "utf8");
+const qmlFunction = (source, name, nextName, scope) => {
+  const start = source.indexOf(`    function ${name}(`);
+  const end = source.indexOf(`    function ${nextName}(`, start);
+  assert.ok(start >= 0 && end > start, `${name} is present in the QML source`);
+  const closingBrace = source.lastIndexOf("\n    }", end);
+  assert.ok(closingBrace > start, `${name} has a closing brace`);
+  const names = Object.keys(scope);
+  return new Function(...names, `return (${source.slice(start, closingBrace + 6).trim()})`)(
+    ...names.map(key => scope[key]));
+};
 
 test("manifest identifies a panel-only Workspace Gallery plugin", () => {
   const manifest = JSON.parse(read("manifest.json"));
@@ -41,6 +51,7 @@ test("vertical and horizontal three-finger gestures are live and distance-aware"
 test("Super+A toggles the gallery and arrow keys select workspaces", () => {
   const config = read("scripts/gesture_config.py");
   assert.match(config, /hl\.bind\("SUPER \+ A", hl\.dsp\.global\("quickshell:workspaceGalleryToggle"\)/);
+  assert.match(config, /namespace = "\^omarchy-workspace-gallery\$"[\s\S]*no_anim = true/);
 
   const gallery = read("Gallery.qml");
   assert.match(gallery, /name: "workspaceGalleryToggle"[\s\S]*onPressed: galleryScope\.toggle\(\)/);
@@ -53,11 +64,49 @@ test("all gallery close paths use a progressive exit animation", () => {
   const widget = read("GalleryWidget.qml");
   assert.match(gallery, /function close\(commitSelection = false, workspaceId = -1, windowData = null, monitorName = ""\)/);
   assert.match(gallery, /id: closeAnimation[\s\S]*property: "revealProgress"[\s\S]*duration: 220/);
-  assert.match(gallery, /visible: GlobalStates\.overviewOpen \|\| galleryScope\.closing/);
+  assert.match(gallery, /visible: \(GlobalStates\.overviewOpen \|\| galleryScope\.closing\)\s*&& galleryScope\.openReady && galleryLoader\.status === Loader\.Ready/);
   assert.match(gallery, /opacity: galleryScope\.revealProgress/);
   assert.match(gallery, /y: \(1 - galleryScope\.revealProgress\) \* 28/);
   assert.match(gallery, /galleryScope\.close\(true\)/);
   assert.match(widget, /signal closeRequested\(bool commitSelection, int workspaceId, var windowData, string monitorName\)/);
+});
+
+test("closing without user selection restores the opening window instead of the hovered monitor", () => {
+  const source = read("Gallery.qml");
+  const widget = read("GalleryWidget.qml");
+  const openingWindow = { address: "0x123", workspace: { id: 2 } };
+  const galleryScope = {
+    closing: false,
+    activeMonitorName: () => "DP-2",
+    selectedWorkspaceId: () => 2,
+    openingWindowData: openingWindow,
+    selectionTouched: false
+  };
+  const GlobalStates = {
+    overviewOpen: true,
+    gallerySelectedWorkspaceByMonitor: { "DP-1": 2, "DP-2": 6 },
+    gallerySwipeFinished: () => {}
+  };
+  const close = qmlFunction(source, "close", "toggle", {
+    galleryScope, GlobalStates,
+    closeAnimation: { restart: () => {} }
+  });
+
+  close();
+  assert.equal(galleryScope.closingMonitorName, "");
+  assert.deepEqual(galleryScope.closingSelectionByMonitor, {});
+  assert.equal(galleryScope.closingRestoreWindowData, openingWindow);
+
+  galleryScope.closing = false;
+  galleryScope.closingRestoreWindowData = null;
+  galleryScope.selectionTouched = true;
+  GlobalStates.gallerySelectedWorkspaceByMonitor = { "DP-1": 3, "DP-2": 6 };
+  close();
+  assert.equal(galleryScope.closingMonitorName, "DP-2");
+  assert.equal(galleryScope.closingSelectionByMonitor["DP-1"], 3);
+  assert.equal(galleryScope.closingRestoreWindowData, null);
+  assert.match(source, /onWorkspaceSelected: monitorName => galleryScope\.selectionTouched = true/);
+  assert.match(widget, /if \(activateInput\) \{[\s\S]*root\.workspaceSelected\(monitorName\)/);
 });
 
 test("clicking the large preview commits the workspace under the pointer", () => {
@@ -94,8 +143,157 @@ test("each gallery monitor keeps its own selected workspace and keyboard target"
   assert.match(gallery, /WlrLayershell\.keyboardFocus: GlobalStates\.overviewOpen && !galleryScope\.closing[\s\S]*WlrKeyboardFocus\.OnDemand/);
   assert.match(gallery, /Keys\.onPressed: event => \{\s+galleryScope\.activateMonitor\(panelWindow\.screen\?\.name \?\? ""\)/);
   assert.match(widget, /root\.selectWorkspace\(fallback\.id, false\)/);
-  assert.match(navigation, /function commitWorkspaceForMonitor\(monitorName, workspaceId\)[\s\S]*overviewWorkspaceEntriesForMonitor\([\s\S]*name, true/);
+  assert.match(navigation, /function commitWorkspaceForMonitor\(monitorName, workspaceId\)[\s\S]*galleryWorkspaceEntriesForMonitor\(name\)/);
   assert.doesNotMatch(widget, /GlobalStates\.overviewFocusedWorkspaceId/);
+});
+
+test("four-monitor gallery keeps one trailing empty workspace per monitor", () => {
+  const source = read("HyprlandData.qml");
+  const WorkspaceMonitorSlots = require(path.join(root, "WorkspaceMonitorSlots.js"));
+  const monitors = [
+    { name: "HDMI-A-1", x: 0, y: 0 },
+    { name: "DP-1", x: 1920, y: 0 },
+    { name: "DP-2", x: 0, y: 1080 },
+    { name: "HDMI-A-2", x: 1920, y: 1080 }
+  ];
+  const workspaces = [
+    { id: 1, monitor: "DP-1" },
+    { id: 4, monitor: "DP-2" },
+    { id: 7, monitor: "HDMI-A-1" },
+    { id: 10, monitor: "HDMI-A-2" }
+  ];
+  const rules = [
+    ...[1, 2, 3].map(id => ({ workspaceString: String(id), monitor: "DP-1", enabled: true })),
+    ...[4, 5, 6].map(id => ({ workspaceString: String(id), monitor: "DP-2", enabled: true })),
+    ...[7, 8, 9].map(id => ({ workspaceString: String(id), monitor: "HDMI-A-1", enabled: true }))
+  ];
+  const GlobalStates = {
+    overviewSortMode: "system",
+    overviewWorkspaceMru: [],
+    overviewPendingWorkspaceMonitorById: {},
+    overviewPendingOccupiedWorkspaces: []
+  };
+  const WorkspaceOrder = {};
+  const model = {
+    monitors,
+    workspaces,
+    workspaceRules: rules,
+    workspaceById: Object.fromEntries(workspaces.map(ws => [ws.id, ws])),
+    windowList: workspaces.map(ws => ({ workspace: { id: ws.id }, mapped: true, hidden: false })),
+    systemWorkspaceIds: () => Array.from({ length: 10 }, (_, index) => index + 1),
+    workspaceMonitorName: ws => ws.monitor,
+    pendingWorkspaceMonitorName: () => "",
+    suppressedEmptyWorkspaceIds: () => GlobalStates.overviewSuppressedEmptyWorkspaceIds ?? [],
+    workspaceHasVisibleWindows(id) {
+      return this.windowList.some(win => win.workspace.id === id && win.mapped && !win.hidden);
+    }
+  };
+  const scope = { root: model, GlobalStates, WorkspaceOrder, WorkspaceMonitorSlots };
+  model.allocateSystemTrailingWorkspaceId = qmlFunction(source,
+    "allocateSystemTrailingWorkspaceId", "overviewWorkspaceEntriesGlobal", scope);
+  model.sortedOverviewMonitors = qmlFunction(source,
+    "sortedOverviewMonitors", "buildGalleryWorkspaceEntriesByMonitor", scope);
+  model.overviewWorkspaceEntriesForMonitor = qmlFunction(source,
+    "overviewWorkspaceEntriesForMonitor", "allocateSystemTrailingWorkspaceId", scope);
+  model.buildGalleryWorkspaceEntriesByMonitor = qmlFunction(source,
+    "buildGalleryWorkspaceEntriesByMonitor", "galleryWorkspaceEntriesForMonitor", scope);
+  model.galleryWorkspaceEntriesForMonitor = qmlFunction(source,
+    "galleryWorkspaceEntriesForMonitor", "overviewWorkspaceEntriesGroupedByMonitor", scope);
+  let buildCalls = 0;
+  const buildEntries = model.overviewWorkspaceEntriesForMonitor;
+  model.overviewWorkspaceEntriesForMonitor = (...args) => {
+    buildCalls++;
+    return buildEntries(...args);
+  };
+  model.galleryWorkspaceEntriesByMonitor = model.buildGalleryWorkspaceEntriesByMonitor();
+
+  const entries = Object.fromEntries(monitors.map(mon =>
+    [mon.name, model.galleryWorkspaceEntriesForMonitor(mon.name)]));
+  assert.equal(buildCalls, monitors.length);
+  const regularIds = name => entries[name].filter(entry => !entry.isTrailingEmpty).map(entry => entry.id);
+  assert.deepEqual(regularIds("HDMI-A-1"), [7]);
+  assert.deepEqual(regularIds("DP-1"), [1]);
+  assert.deepEqual(regularIds("DP-2"), [4]);
+  assert.deepEqual(regularIds("HDMI-A-2"), [10]);
+  assert.deepEqual(monitors.map(mon => entries[mon.name].filter(entry => entry.isTrailingEmpty).map(entry => entry.id)),
+    [[8], [2], [5], [11]]);
+
+  model.workspaces.push({ id: 5, monitor: "DP-2" });
+  model.workspaceById[5] = model.workspaces.at(-1);
+  model.galleryWorkspaceEntriesByMonitor = model.buildGalleryWorkspaceEntriesByMonitor();
+  assert.deepEqual(model.galleryWorkspaceEntriesForMonitor("DP-2").map(entry => entry.id), [4, 5]);
+  monitors[2].activeWorkspace = { id: 5 };
+  model.galleryWorkspaceEntriesByMonitor = model.buildGalleryWorkspaceEntriesByMonitor();
+  assert.deepEqual(model.galleryWorkspaceEntriesForMonitor("DP-2").map(entry => entry.id), [4, 5]);
+  assert.equal(model.galleryWorkspaceEntriesForMonitor("DP-2").at(-1).isTrailingEmpty, true);
+  assert.ok(!model.galleryWorkspaceEntriesForMonitor("DP-1").some(entry => entry.id === 5));
+
+  // The drop is visible immediately through pending state, before hyprctl
+  // publishes the moved client and workspace.
+  GlobalStates.overviewPendingWorkspaceMonitorById = { 8: "HDMI-A-1" };
+  GlobalStates.overviewPendingOccupiedWorkspaces = [{ id: 8, monitorName: "HDMI-A-1" }];
+  GlobalStates.overviewSuppressedEmptyWorkspaceIds = [7];
+  model.galleryWorkspaceEntriesByMonitor = model.buildGalleryWorkspaceEntriesByMonitor();
+  assert.deepEqual(model.galleryWorkspaceEntriesForMonitor("HDMI-A-1").map(entry => entry.id), [8, 9]);
+  assert.equal(model.galleryWorkspaceEntriesForMonitor("HDMI-A-1")[0].isPendingOccupied, true);
+  assert.equal(model.galleryWorkspaceEntriesForMonitor("HDMI-A-1")[1].isTrailingEmpty, true);
+
+  model.windowList.find(win => win.workspace.id === 7).workspace.id = 8;
+  model.workspaces.push({ id: 8, monitor: "HDMI-A-1" });
+  model.workspaceById[8] = model.workspaces.at(-1);
+  GlobalStates.overviewPendingWorkspaceMonitorById = {};
+  GlobalStates.overviewPendingOccupiedWorkspaces = [];
+  GlobalStates.overviewSuppressedEmptyWorkspaceIds = [];
+  model.galleryWorkspaceEntriesByMonitor = model.buildGalleryWorkspaceEntriesByMonitor();
+  assert.deepEqual(model.galleryWorkspaceEntriesForMonitor("HDMI-A-1").map(entry => entry.id), [8, 9]);
+});
+
+test("single-monitor gallery appends one empty workspace after each drop", () => {
+  const source = read("HyprlandData.qml");
+  const WorkspaceMonitorSlots = require(path.join(root, "WorkspaceMonitorSlots.js"));
+  const monitor = { name: "DP-1", x: 0, y: 0, activeWorkspace: { id: 1 } };
+  const GlobalStates = {
+    overviewSortMode: "system",
+    overviewWorkspaceMru: [],
+    overviewPendingWorkspaceMonitorById: {},
+    overviewPendingOccupiedWorkspaces: []
+  };
+  const model = {
+    monitors: [monitor],
+    workspaces: [{ id: 1, monitor: "DP-1" }],
+    workspaceRules: [],
+    workspaceById: { 1: { id: 1, monitor: "DP-1" } },
+    windowList: [{ workspace: { id: 1 }, mapped: true, hidden: false }],
+    systemWorkspaceIds: () => Array.from({ length: 10 }, (_, index) => index + 1),
+    workspaceMonitorName: ws => ws.monitor,
+    pendingWorkspaceMonitorName: () => "",
+    suppressedEmptyWorkspaceIds: () => GlobalStates.overviewSuppressedEmptyWorkspaceIds ?? [],
+    workspaceHasVisibleWindows(id) {
+      return this.windowList.some(win => win.workspace.id === id && win.mapped && !win.hidden);
+    }
+  };
+  const scope = { root: model, GlobalStates, WorkspaceOrder: {}, WorkspaceMonitorSlots };
+  model.sortedOverviewMonitors = qmlFunction(source,
+    "sortedOverviewMonitors", "buildGalleryWorkspaceEntriesByMonitor", scope);
+  model.overviewWorkspaceEntriesForMonitor = qmlFunction(source,
+    "overviewWorkspaceEntriesForMonitor", "allocateSystemTrailingWorkspaceId", scope);
+  model.buildGalleryWorkspaceEntriesByMonitor = qmlFunction(source,
+    "buildGalleryWorkspaceEntriesByMonitor", "galleryWorkspaceEntriesForMonitor", scope);
+  const entries = () => model.buildGalleryWorkspaceEntriesByMonitor()["DP-1"];
+
+  assert.deepEqual(entries().map(entry => entry.id), [1, 2]);
+  GlobalStates.overviewPendingWorkspaceMonitorById = { 2: "DP-1" };
+  GlobalStates.overviewPendingOccupiedWorkspaces = [{ id: 2, monitorName: "DP-1" }];
+  assert.deepEqual(entries().map(entry => entry.id), [1, 2, 3]);
+  assert.deepEqual(entries().filter(entry => entry.isTrailingEmpty).map(entry => entry.id), [3]);
+
+  GlobalStates.overviewPendingWorkspaceMonitorById = {};
+  GlobalStates.overviewPendingOccupiedWorkspaces = [];
+  model.workspaces = [{ id: 10, monitor: "DP-1" }];
+  model.workspaceById = { 10: model.workspaces[0] };
+  model.windowList = [{ workspace: { id: 10 }, mapped: true, hidden: false }];
+  monitor.activeWorkspace.id = 10;
+  assert.deepEqual(entries().map(entry => entry.id), [10, 11]);
 });
 
 test("compositor monitor names are Lua-quoted before dispatch", () => {

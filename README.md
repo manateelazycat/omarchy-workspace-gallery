@@ -23,7 +23,10 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
 - While the gallery is open, pinch inward with two fingers or press `Down` to
   compact all occupied workspaces into consecutive numeric slots. Workspace
   order and monitor assignment are preserved.
-- The top 20% of the screen shows every workspace as a live thumbnail.
+- The top 20% of the screen shows occupied workspaces and one empty workspace
+  at the end. Dropping a window there creates the next empty workspace.
+- On multiple monitors, each preview shows only that monitor's workspaces and
+  its own final empty workspace.
 - The bottom 80% shows the selected workspace at a larger scale.
 - Leaving the gallery applies each monitor's selected workspace independently.
 - Drag a window between the top thumbnails and the large preview, including

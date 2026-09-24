@@ -8,6 +8,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.Wayland._ToplevelManagement
 import Quickshell.Hyprland
+import "WorkspaceMonitorSlots.js" as WorkspaceMonitorSlots
 
 /**
  * Provides access to some Hyprland data not available in Quickshell.Hyprland.
@@ -18,6 +19,7 @@ Singleton {
     property var addresses: []
     property var windowByAddress: ({})
     property var workspaces: []
+    property var workspaceRules: []
     property var workspaceIds: []
     property var workspaceById: ({})
     property bool clientsLoaded: false
@@ -50,6 +52,15 @@ Singleton {
         const _sortMode = GlobalStates.overviewSortMode;
         void _serial; void _refresh; void _order; void _mru; void _sortMode;
         return root.overviewWorkspaceEntriesGroupedByMonitor() ?? [];
+    }
+    property var galleryWorkspaceEntriesByMonitor: {
+        const _serial = root.dataSerial;
+        const _refresh = GlobalStates.overviewRefreshSerial;
+        const _order = WorkspaceOrder.revision;
+        const _mru = GlobalStates.overviewWorkspaceMru;
+        const _sortMode = GlobalStates.overviewSortMode;
+        void _serial; void _refresh; void _order; void _mru; void _sortMode;
+        return root.buildGalleryWorkspaceEntriesByMonitor();
     }
 
     // Convenient stuff
@@ -241,13 +252,17 @@ Singleton {
         let regularWorkspaces;
         if (useSystemOrder) {
             regularWorkspaces = [];
+            const filterEmptyByMonitor = targetMonitor.length > 0 && root.monitors.length > 1;
             for (const id of root.systemWorkspaceIds()) {
                 const live = root.workspaceById[id];
                 if (live) {
                     if (targetMonitor && root.workspaceMonitorName(live) !== targetMonitor)
                         continue;
                     regularWorkspaces.push(live);
-                } else if (showEmptySystemSlots) {
+                } else if (showEmptySystemSlots
+                        && (!filterEmptyByMonitor
+                            || WorkspaceMonitorSlots.ownerForEmptyWorkspace(
+                                id, root.workspaceRules, root.monitors) === targetMonitor)) {
                     regularWorkspaces.push({
                         id,
                         name: String(id),
@@ -440,6 +455,97 @@ Singleton {
         });
     }
 
+    function buildGalleryWorkspaceEntriesByMonitor() {
+        const reservedIds = {};
+        const byMonitor = {};
+        const usedIds = {};
+        const windowIds = {};
+        const validId = id => Number.isInteger(id) && id >= 1 && id <= 100;
+        for (const workspace of root.workspaces) {
+            if (validId(workspace?.id))
+                usedIds[workspace.id] = true;
+        }
+        for (const win of root.windowList) {
+            if (validId(win?.workspace?.id)) {
+                usedIds[win.workspace.id] = true;
+                windowIds[win.workspace.id] = true;
+            }
+        }
+        for (const id of Object.keys(GlobalStates.overviewPendingWorkspaceMonitorById ?? {})) {
+            if (validId(Number(id)))
+                usedIds[id] = true;
+        }
+        for (const entry of GlobalStates.overviewPendingOccupiedWorkspaces ?? []) {
+            if (validId(entry?.id))
+                usedIds[entry.id] = true;
+        }
+        for (const monitor of root.monitors) {
+            if (validId(monitor.activeWorkspace?.id))
+                usedIds[monitor.activeWorkspace.id] = true;
+        }
+        const suppressed = root.suppressedEmptyWorkspaceIds();
+        for (const monitor of root.sortedOverviewMonitors()) {
+            const entries = root.overviewWorkspaceEntriesForMonitor(
+                monitor.name, false, {}, true, false).filter(entry =>
+                    entry.isPendingOccupied
+                    || (!suppressed.includes(entry.id) && root.workspaceHasVisibleWindows(entry.id)));
+            let trailingId = Number(monitor.activeWorkspace?.id ?? -1);
+            const live = root.workspaceById[trailingId];
+            if (!validId(trailingId) || reservedIds[trailingId]
+                    || entries.some(entry => entry.id === trailingId)
+                    || windowIds[trailingId]
+                    || suppressed.includes(trailingId)
+                    || (live && root.workspaceMonitorName(live) !== monitor.name))
+                trailingId = -1;
+
+            // Prefer the next numeric slot, reusing a live empty workspace on
+            // this monitor before allocating a new one. Try lower gaps only if
+            // the IDs after the last occupied workspace are exhausted.
+            const highestOccupiedId = entries.reduce((highest, entry) =>
+                Math.max(highest, entry.id), 0);
+            for (const range of [[highestOccupiedId + 1, 100], [1, highestOccupiedId]]) {
+                for (let pass = 0; pass < 2 && trailingId < 1; ++pass) {
+                    for (let id = range[0]; id <= range[1]; ++id) {
+                        if (reservedIds[id] || windowIds[id] || suppressed.includes(id)
+                                || entries.some(entry => entry.id === id))
+                            continue;
+                        const existing = root.workspaceById[id];
+                        const existingOwner = existing ? root.workspaceMonitorName(existing) : "";
+                        if (existing && existingOwner !== monitor.name)
+                            continue;
+                        if (usedIds[id] && !existing)
+                            continue;
+                        const owner = existingOwner || WorkspaceMonitorSlots.ownerForEmptyWorkspace(
+                            id, root.workspaceRules, root.monitors);
+                        if ((pass === 0 && owner !== monitor.name)
+                                || (pass === 1 && owner.length > 0))
+                            continue;
+                        trailingId = id;
+                        break;
+                    }
+                }
+                if (trailingId > 0)
+                    break;
+            }
+            if (trailingId > 0) {
+                reservedIds[trailingId] = true;
+                entries.push({
+                    id: trailingId,
+                    monitorName: monitor.name,
+                    monitorIndex: 0,
+                    monitorLabel: monitor.name,
+                    isTrailingEmpty: true
+                });
+            }
+            byMonitor[monitor.name] = entries;
+        }
+        return byMonitor;
+    }
+
+    function galleryWorkspaceEntriesForMonitor(monitorName) {
+        return root.galleryWorkspaceEntriesByMonitor?.[monitorName] ?? [];
+    }
+
     function overviewWorkspaceEntriesGroupedByMonitor() {
         const monitors = root.sortedOverviewMonitors();
         const all = [];
@@ -524,6 +630,11 @@ Singleton {
         updateActiveWindow();
     }
 
+    function updateWorkspaceRules() {
+        if (root.hyprlandIpcAvailable)
+            getWorkspaceRules.running = true;
+    }
+
     Connections {
         target: GlobalStates
         function onOverviewPendingWorkspaceMonitorByIdChanged() {
@@ -558,12 +669,15 @@ Singleton {
 
     Component.onCompleted: {
         updateAll();
+        updateWorkspaceRules();
     }
 
     Connections {
         target: Hyprland
 
         function onRawEvent(event) {
+            if (["configreloaded", "monitoradded", "monitorremoved"].includes(event.name))
+                root.updateWorkspaceRules();
             // Layer/screencast events don't change clients/workspaces/monitors.
             if (["openlayer", "closelayer", "screencast", "custom"].includes(event.name)) return;
             // activeWindow is cheap (tiny JSON) and feeds focusedClientForWorkspace,
@@ -673,6 +787,29 @@ Singleton {
         }
     }
 
+
+    Process {
+        id: getWorkspaceRules
+        command: ["hyprctl", "workspacerules", "-j"]
+        stdout: StdioCollector {
+            id: workspaceRulesCollector
+            onStreamFinished: {
+                if (!root.hyprlandIpcAvailable || !workspaceRulesCollector.text.trim())
+                    return;
+                try {
+                    const rules = JSON.parse(workspaceRulesCollector.text);
+                    if (!Array.isArray(rules))
+                        return;
+                    if (JSON.stringify(root.workspaceRules) !== JSON.stringify(rules)) {
+                        root.workspaceRules = rules;
+                        root.markDataChanged();
+                    }
+                } catch (e) {
+                    console.warn("[HyprlandData] Failed to parse hyprctl workspacerules:", e);
+                }
+            }
+        }
+    }
 
     Process {
         id: getWorkspaces

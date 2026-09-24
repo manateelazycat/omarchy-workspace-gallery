@@ -13,6 +13,7 @@ singleton OmarchyTheme 1.0 OmarchyTheme.qml
 singleton ServiceManager 1.0 ServiceManager.qml
 singleton TuiStyle 1.0 TuiStyle.qml
 singleton Wallpaper 1.0 Wallpaper.qml
+singleton WindowSnapshots 1.0 WindowSnapshots.qml
 singleton WorkspaceOrder 1.0 WorkspaceOrder.qml
 singleton WorkspaceNavigation 1.0 WorkspaceNavigation.qml
 singleton OverviewSwitchingController 1.0 OverviewSwitchingController.qml

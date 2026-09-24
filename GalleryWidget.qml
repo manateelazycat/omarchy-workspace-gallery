@@ -13,6 +13,7 @@ Item {
 
     signal closeRequested(bool commitSelection, int workspaceId, var windowData, string monitorName)
     signal monitorActivated(string monitorName)
+    signal workspaceSelected(string monitorName)
 
     required property var screen
     property bool closing: false
@@ -26,14 +27,10 @@ Item {
     readonly property url wallpaperUrl: Wallpaper.readyUrl !== ""
         ? Wallpaper.readyUrl : Wallpaper.requestedUrl
     readonly property var entries: {
-        const revision = root.modelRevision;
-        void revision;
         const name = root.monitor?.name ?? "";
-        const scoped = ServiceManager.workspace.overviewWorkspaceEntriesForMonitor(
-            name, true, {}, true, true) ?? [];
-        return scoped.length > 0
-            ? scoped
-            : (ServiceManager.workspace.overviewWorkspaceEntries ?? []);
+        return name.length > 0
+            ? (ServiceManager.workspace.galleryWorkspaceEntriesForMonitor(name) ?? [])
+            : [];
     }
     readonly property var entryIds: root.entries.map(entry => entry.id)
     readonly property int selectedWorkspaceId: GlobalStates.gallerySelectedWorkspaceByMonitor[root.monitor?.name ?? ""]
@@ -208,8 +205,10 @@ Item {
         const monitorName = root.monitor?.name ?? "";
         if (!monitorName || !root.entries.some(entry => entry.id === workspaceId))
             return;
-        if (activateInput)
+        if (activateInput) {
             GlobalStates.galleryActiveMonitorName = monitorName;
+            root.workspaceSelected(monitorName);
+        }
         GlobalStates.gallerySelectedWorkspaceByMonitor = Object.assign({},
             GlobalStates.gallerySelectedWorkspaceByMonitor,
             { [monitorName]: workspaceId });
@@ -458,7 +457,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: ColorUtils.transparentize(TuiStyle.bg, 0.06)
+        color: TuiStyle.bg
     }
 
     Rectangle {
@@ -523,7 +522,7 @@ Item {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: false
                 cache: true
-                opacity: topCard.modelData.isTrailingEmpty ? 0.55 : 0.82
+                opacity: 1
             }
 
             Rectangle {

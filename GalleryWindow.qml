@@ -18,6 +18,16 @@ OverviewWindow {
     required property real previewHeight
     required property bool closeOnActivate
     property bool interactionEnabled: true
+    readonly property string snapshotId: String(root.windowData?.stableId ?? "")
+    readonly property real sourceWorkspaceWidth:
+        root.galleryRoot.usableLogicalWidth(root.sourceMonitor)
+    readonly property real sourceWorkspaceHeight:
+        root.galleryRoot.usableLogicalHeight(root.sourceMonitor)
+    readonly property real fittedScale: Math.min(
+        root.previewWidth / Math.max(1, root.sourceWorkspaceWidth),
+        root.previewHeight / Math.max(1, root.sourceWorkspaceHeight))
+    readonly property real fittedWorkspaceWidth: root.sourceWorkspaceWidth * root.fittedScale
+    readonly property real fittedWorkspaceHeight: root.sourceWorkspaceHeight * root.fittedScale
 
     signal activated(var windowData)
 
@@ -94,18 +104,22 @@ OverviewWindow {
     }
 
     toplevel: root.modelToplevel
-    captureActive: GlobalStates.overviewOpen
+    // Hyprland's legacy live toplevel export includes the desktop beneath
+    // translucent windows. grim -T uses the clean toplevel capture path and
+    // retains its alpha, so each card can composite the window over wallpaper.
+    captureActive: false
+    staticSnapshotUrl: WindowSnapshots.urls[root.address] ?? ""
     monitorData: root.sourceMonitor
     widgetMonitor: root.galleryRoot.monitorData
     windowData: root.liveWindowData ?? root.cachedWindowData
     visible: !!root.windowData && root.windowData.mapped && !root.windowData.hidden
-    xOffset: root.previewX
-    yOffset: root.previewY
-    workspaceWidth: root.previewWidth
-    workspaceHeight: root.previewHeight
-    scaleX: root.previewWidth / Math.max(1, root.galleryRoot.usableLogicalWidth(root.sourceMonitor))
-    scaleY: root.previewHeight / Math.max(1, root.galleryRoot.usableLogicalHeight(root.sourceMonitor))
-    scale: Math.min(scaleX, scaleY)
+    xOffset: root.previewX + (root.previewWidth - root.fittedWorkspaceWidth) / 2
+    yOffset: root.previewY + (root.previewHeight - root.fittedWorkspaceHeight) / 2
+    workspaceWidth: root.fittedWorkspaceWidth
+    workspaceHeight: root.fittedWorkspaceHeight
+    scaleX: root.fittedScale
+    scaleY: root.fittedScale
+    scale: root.fittedScale
     opacity: root.Drag.active && root.closeOnActivate
         ? 0
         : (root.anyPreviewContent || root.showingFreeze || root.captureAttempt >= 8 ? 1 : 0)
@@ -120,6 +134,15 @@ OverviewWindow {
     onLiveWindowDataChanged: {
         if (root.liveWindowData)
             root.cachedWindowData = root.liveWindowData;
+    }
+    Component.onCompleted: WindowSnapshots.request(root.address, root.snapshotId)
+    onSnapshotIdChanged: WindowSnapshots.request(root.address, root.snapshotId)
+    Connections {
+        target: GlobalStates
+        function onOverviewOpenChanged() {
+            if (GlobalStates.overviewOpen)
+                Qt.callLater(() => WindowSnapshots.request(root.address, root.snapshotId));
+        }
     }
     onXChanged: root.publishWindowDropTarget()
     onYChanged: root.publishWindowDropTarget()
