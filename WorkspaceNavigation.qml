@@ -196,7 +196,7 @@ Singleton {
             return;
         const ws = ServiceManager.workspace.workspaceDataForId(wsId);
         if (ws?.monitor)
-            Hyprland.dispatch(`hl.dsp.focus({monitor="${ws.monitor}"})`);
+            Hyprland.dispatch(`hl.dsp.focus({monitor=${root.luaQuoted(ws.monitor)}})`);
         Hyprland.dispatch(`hl.dsp.focus({ workspace = ${wsId} })`);
     }
 
@@ -254,7 +254,7 @@ Singleton {
     function focusMonitorForEntry(entry) {
         const monitorName = entry?.monitorName ?? "";
         if (monitorName.length > 0)
-            Hyprland.dispatch(`hl.dsp.focus({monitor="${monitorName}"})`);
+            Hyprland.dispatch(`hl.dsp.focus({monitor=${root.luaQuoted(monitorName)}})`);
     }
 
     function commitSelectedWorkspace() {
@@ -263,7 +263,7 @@ Singleton {
             root.focusMonitorForEntry(entry);
             Hyprland.dispatch(`hl.dsp.focus({ workspace = ${entry.id} })`);
             if ((entry?.monitorName ?? "").length > 0)
-                Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${entry.id}", monitor = "${entry.monitorName}" })`);
+                Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${entry.id}", monitor = ${root.luaQuoted(entry.monitorName)} })`);
             return;
         }
 
@@ -281,10 +281,10 @@ Singleton {
         const entry = entries.find(candidate => candidate.id === id);
         if (!entry)
             return;
-        Hyprland.dispatch(`hl.dsp.focus({monitor="${name}"})`);
+        Hyprland.dispatch(`hl.dsp.focus({monitor=${root.luaQuoted(name)}})`);
         Hyprland.dispatch(`hl.dsp.focus({ workspace = ${id} })`);
         if (entry.isTrailingEmpty)
-            Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${id}", monitor = "${name}" })`);
+            Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${id}", monitor = ${root.luaQuoted(name)} })`);
     }
 
     function commitGallerySelections(selections, focusedMonitorName) {
@@ -297,7 +297,7 @@ Singleton {
         }
         const focusName = String(focusedMonitorName ?? "");
         if (focusName.length > 0)
-            Hyprland.dispatch(`hl.dsp.focus({monitor="${focusName}"})`);
+            Hyprland.dispatch(`hl.dsp.focus({monitor=${root.luaQuoted(focusName)}})`);
     }
 
     function luaQuoted(value) {

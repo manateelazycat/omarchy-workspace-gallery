@@ -98,6 +98,17 @@ test("each gallery monitor keeps its own selected workspace and keyboard target"
   assert.doesNotMatch(widget, /GlobalStates\.overviewFocusedWorkspaceId/);
 });
 
+test("compositor monitor names are Lua-quoted before dispatch", () => {
+  const navigation = read("WorkspaceNavigation.qml");
+  for (const file of ["WorkspaceNavigation.qml", "Overview.qml", "OverviewWidget.qml"])
+    assert.doesNotMatch(read(file), /monitor\s*=\s*"\$\{/);
+
+  assert.match(navigation, /hl\.dsp\.focus\(\{monitor=\$\{root\.luaQuoted\(name\)\}\}\)/);
+  assert.match(navigation, /hl\.dsp\.workspace\.move\(\{ workspace = "\$\{id\}", monitor = \$\{root\.luaQuoted\(name\)\} \}\)/);
+  assert.match(read("Overview.qml"), /monitor=\$\{WorkspaceNavigation\.luaQuoted\(entry\.monitorName\)\}/);
+  assert.match(read("OverviewWidget.qml"), /monitor=\$\{WorkspaceNavigation\.luaQuoted\(workspace\.monitorName\)\}/);
+});
+
 test("closing the gallery commits every monitor's selected workspace", () => {
   const gallery = read("Gallery.qml");
   const widget = read("GalleryWidget.qml");

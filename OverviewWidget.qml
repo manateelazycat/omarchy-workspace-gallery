@@ -807,10 +807,10 @@ Item {
                             if (GlobalStates.overviewDraggingTargetWorkspace === -1) {
                                 if (workspace.isTrailingEmpty) {
                                     if (workspace.monitorName.length > 0)
-                                        Hyprland.dispatch(`hl.dsp.focus({monitor="${workspace.monitorName}"})`);
+                                        Hyprland.dispatch(`hl.dsp.focus({monitor=${WorkspaceNavigation.luaQuoted(workspace.monitorName)}})`);
                                     Hyprland.dispatch(`hl.dsp.focus({ workspace = ${workspace.workspaceValue} })`);
                                     if (workspace.monitorName.length > 0)
-                                        Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${workspace.workspaceValue}", monitor = "${workspace.monitorName}" })`);
+                                        Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${workspace.workspaceValue}", monitor = ${WorkspaceNavigation.luaQuoted(workspace.monitorName)} })`);
                                     GlobalStates.overviewOpen = false;
                                 } else {
                                     if (ServiceManager.workspace.workspaceHasVisibleWindows(workspace.workspaceValue))

@@ -132,11 +132,11 @@ Scope {
         GlobalStates.overviewOpen = false;
 
         if ((entry.monitorName ?? "").length > 0)
-            Hyprland.dispatch(`hl.dsp.focus({monitor="${entry.monitorName}"})`);
+            Hyprland.dispatch(`hl.dsp.focus({monitor=${WorkspaceNavigation.luaQuoted(entry.monitorName)}})`);
 
         Hyprland.dispatch(`hl.dsp.focus({ workspace = ${entry.id} })`);
         if (entry.isTrailingEmpty && (entry.monitorName ?? "").length > 0)
-            Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${entry.id}", monitor = "${entry.monitorName}" })`);
+            Hyprland.dispatch(`hl.dsp.workspace.move({ workspace = "${entry.id}", monitor = ${WorkspaceNavigation.luaQuoted(entry.monitorName)} })`);
 
         if (!entry.isTrailingEmpty && ServiceManager.workspace.workspaceHasVisibleWindows(entry.id))
             GlobalStates.promoteWorkspaceMru(entry.id);
