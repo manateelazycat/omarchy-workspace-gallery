@@ -1,5 +1,7 @@
 # Omarchy Workspace Gallery
 
+English | [简体中文](README.zh-CN.md)
+
 https://github.com/user-attachments/assets/f2a784c9-a5dc-433e-afa6-f3d038c70133
 
 [Workspace compaction animation](assets/workspace-gallery-compaction-animation.mp4)
