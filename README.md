@@ -39,6 +39,8 @@ A gesture-driven workspace gallery with live previews and seamless drag-and-drop
   workspace and close the gallery.
 - `Super+W` closes the most recently focused window in the selected workspace;
   outside the gallery it keeps its normal close-active-window behavior.
+- Add the Workspace Gallery button to the right side of the bar. For an existing panel-only installation, run `omarchy plugin disable io.github.manateelazycat.workspace-gallery` and then `omarchy bar put io.github.manateelazycat.workspace-gallery --section right`. The bar entry also loads the gallery panel. Left click toggles the gallery. Its right-click menu offers “默认” (Default) and “关闭窗口切换工作区” (Switch workspace after closing a window); Default is selected initially and the choice is saved in the bar configuration.
+- In the second mode, closing the last window on the focused monitor's active workspace with `Super+W` switches to the most recently visited occupied workspace on that monitor. If the recent workspace is empty, the plugin chooses another occupied workspace on that monitor.
 
 Outside the gallery, three-finger horizontal swipes continue switching Hyprland workspaces.
 

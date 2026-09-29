@@ -2,13 +2,24 @@
   "schemaVersion": 1,
   "id": "io.github.manateelazycat.workspace-gallery",
   "name": "Workspace Gallery",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "author": "ManateeLazyCat",
   "license": "GPL-3.0-only",
   "description": "A gesture-driven workspace gallery with live previews and seamless drag-and-drop window management.",
   "keepLoaded": true,
-  "kinds": ["panel"],
+  "kinds": ["panel", "bar-widget"],
   "entryPoints": {
-    "panel": "Gallery.qml"
+    "panel": "Gallery.qml",
+    "barWidget": "GalleryBarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Workspace Gallery",
+    "description": "Open the gallery and choose how Super+W handles an empty workspace.",
+    "category": "Desktop",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "closeWindowSwitchWorkspace": false
+    }
   }
 }

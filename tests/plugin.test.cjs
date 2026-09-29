@@ -16,13 +16,17 @@ const qmlFunction = (source, name, nextName, scope) => {
     ...names.map(key => scope[key]));
 };
 
-test("manifest identifies a panel-only Workspace Gallery plugin", () => {
+test("manifest identifies a panel and right-side bar widget", () => {
   const manifest = JSON.parse(read("manifest.json"));
   assert.equal(manifest.id, "io.github.manateelazycat.workspace-gallery");
   assert.equal(manifest.name, "Workspace Gallery");
   assert.equal(manifest.license, "GPL-3.0-only");
-  assert.deepEqual(manifest.kinds, ["panel"]);
+  assert.deepEqual(manifest.kinds, ["panel", "bar-widget"]);
   assert.equal(manifest.entryPoints.panel, "Gallery.qml");
+  assert.equal(manifest.entryPoints.barWidget, "GalleryBarWidget.qml");
+  assert.match(read("qmldir"), /GalleryBarWidget 1\.0 GalleryBarWidget\.qml/);
+  assert.equal(manifest.barWidget.defaultSection, "right");
+  assert.equal(manifest.barWidget.defaults.closeWindowSwitchWorkspace, false);
 });
 
 test("gallery preserves the requested 20/80 screen split", () => {
@@ -333,8 +337,45 @@ test("Super+W closes the latest window from the workspace selected in the galler
   assert.match(config, /hl\.bind\("SUPER \+ W", hl\.dsp\.global\("quickshell:workspaceGalleryCloseWindow"\)/);
   assert.match(gallery, /name: "workspaceGalleryCloseWindow"[\s\S]*galleryScope\.closeSelectedWorkspaceWindow\(\)/);
   assert.match(gallery, /galleryScope\.selectedWorkspaceId\(galleryScope\.activeMonitorName\(\)\)[\s\S]*WorkspaceNavigation\.closeMostRecentWindowInWorkspace\(workspaceId\)/);
-  assert.match(gallery, /if \(!GlobalStates\.overviewOpen\)[\s\S]*hl\.dsp\.window\.close\(\)/);
+  assert.match(gallery, /if \(!GlobalStates\.overviewOpen\)[\s\S]*galleryScope\.closeActiveWindow\(\)/);
+  assert.match(gallery, /function closeActiveWindow\(\)[\s\S]*hl\.dsp\.window\.close\(\)/);
   assert.match(navigation, /WorkspaceWindowSelection\.mostRecentClientForWorkspace/);
+});
+
+test("closing the last window returns to an occupied workspace on the same monitor", () => {
+  const { rememberWorkspace, destinationAfterClose } = require(path.join(root, "WorkspaceCloseSwitch.js"));
+  let history = {};
+  history = rememberWorkspace(history, "DP-1", 2);
+  history = rememberWorkspace(history, "DP-1", 5);
+  history = rememberWorkspace(history, "DP-1", 2);
+  history = rememberWorkspace(history, "DP-2", 9);
+  assert.deepEqual(history["DP-1"], [2, 5]);
+  assert.deepEqual(history["DP-2"], [9]);
+
+  const monitors = [{ id: 0, name: "DP-1" }, { id: 1, name: "DP-2" }];
+  const window = (address, workspace, monitor) => ({
+    address, workspace: { id: workspace }, monitor, mapped: true, hidden: false
+  });
+  const occupied = [window("0xb", 5, 0), window("0xc", 3, 0), window("0xd", 9, 1)];
+  const target = clients => destinationAfterClose(clients, monitors, "DP-1", 2, "0xa", history);
+  assert.equal(target(occupied), 5);
+  assert.equal(target([...occupied, window("0xa", 2, 0)]), -1);
+  assert.equal(target([...occupied, window("0xe", 2, 0)]), -1);
+  assert.equal(target([window("0xd", 9, 1)]), -1);
+
+  const olderHistory = { "DP-1": [2, 7, 5] };
+  assert.equal(destinationAfterClose(occupied, monitors, "DP-1", 2, "0xa", olderHistory), 5);
+  assert.equal(destinationAfterClose(occupied, monitors, "DP-1", 2, "0xa", {}), 5);
+  assert.equal(destinationAfterClose([window("0xc", 3, 0), window("0xd", 9, 1)],
+    monitors, "DP-1", 5, "0xa", {}), 3);
+
+  const gallery = read("Gallery.qml");
+  const widget = read("GalleryBarWidget.qml");
+  assert.match(gallery, /event\.name === "closewindow"[\s\S]*galleryScope\.onWindowClosed\(event\.data\)/);
+  assert.match(gallery, /Hyprland\.focusedMonitor\?\.name !== pending\.monitorName/);
+  assert.match(gallery, /Hyprland\.focusedWorkspace\?\.id !== pending\.workspaceId/);
+  assert.match(widget, /label: "默认"[\s\S]*label: "关闭窗口切换工作区"/);
+  assert.match(widget, /updateEntryInline\(root\.moduleName, entry\)/);
 });
 
 test("selected-workspace close prefers the most recently focused visible client", () => {

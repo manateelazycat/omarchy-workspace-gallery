@@ -28,6 +28,8 @@ https://github.com/user-attachments/assets/f2a784c9-a5dc-433e-afa6-f3d038c70133
 - 点击顶部工作区可选中它；点击下方大预览中的窗口可聚焦该窗口并退出总览。
 - 总览打开时，按左右方向键或 `H`／`L` 选择工作区。按 `Enter`、`Space` 或 `Esc` 会聚焦选中的工作区并关闭总览。
 - `Super+W` 会关闭选中工作区里最近获得焦点的窗口；在总览之外则保留原有的关闭当前窗口行为。
+- 可将 Workspace Gallery 按钮放在任务栏右侧。左键打开或关闭总览；右键菜单有“默认”和“关闭窗口切换工作区”两项，默认选“默认”。选择后会保存到任务栏配置。
+- 选择“关闭窗口切换工作区”后，在总览之外按 `Super+W` 关闭当前工作区的最后一个窗口时，会跳到当前显示器上最近访问过且仍有窗口的工作区。优先回到刚才来回切换的工作区；没有可用历史时按工作区编号选择。其他显示器不会受影响。
 
 总览关闭时，三指水平滑动仍按 Hyprland 的方式切换工作区。
 
@@ -39,6 +41,13 @@ omarchy plugin add https://github.com/manateelazycat/omarchy-workspace-gallery.g
 ```
 
 手势安装脚本会将 `Super+A` 快捷键和手势添加到 `~/.config/hypr/input.lua` 中一个明确标记的配置块，创建带时间戳的备份，重新加载 Hyprland，并验证配置。
+
+将按钮放在任务栏右侧。若已用旧版本安装，先将纯面板条目移出插件列表，再将同一插件放入任务栏；按钮条目也会继续加载总览面板：
+
+```bash
+omarchy plugin disable io.github.manateelazycat.workspace-gallery
+omarchy bar put io.github.manateelazycat.workspace-gallery --section right
+```
 
 ## 卸载
 

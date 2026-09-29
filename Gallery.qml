@@ -6,6 +6,8 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Hyprland
 import Quickshell.Hyprland._GlobalShortcuts 0.0
+import Quickshell.Io
+import "WorkspaceCloseSwitch.js" as WorkspaceCloseSwitch
 
 Scope {
     id: galleryScope
@@ -24,6 +26,99 @@ Scope {
     property bool selectionTouched: false
     property bool openReady: false
     property real revealProgress: 0
+    property var workspaceHistoryByMonitor: ({})
+    property var pendingWindowClose: null
+    property int closeSnapshotAttempts: 0
+
+    function observeFocusedWorkspace() {
+        const monitor = Hyprland.focusedMonitor;
+        const id = monitor?.activeWorkspace?.id ?? Hyprland.focusedWorkspace?.id;
+        galleryScope.workspaceHistoryByMonitor = WorkspaceCloseSwitch.rememberWorkspace(
+            galleryScope.workspaceHistoryByMonitor, monitor?.name ?? "", id);
+    }
+
+    function closeActiveWindow() {
+        galleryScope.pendingWindowClose = null;
+        closeGuardTimer.stop();
+        closeSnapshotRetryTimer.stop();
+        if (GlobalStates.closeWindowSwitchWorkspace) {
+            const monitorName = Hyprland.focusedMonitor?.name ?? "";
+            const workspaceId = Hyprland.focusedWorkspace?.id ?? -1;
+            const nativeAddress = Hyprland.activeToplevel?.HyprlandToplevel?.address
+                || Hyprland.activeToplevel?.address;
+            const cachedWindow = ServiceManager.workspace.activeWindow;
+            const address = ServiceManager.workspace.normalizeAddress(nativeAddress
+                || (cachedWindow?.workspace?.id === workspaceId ? cachedWindow.address : ""));
+            if (monitorName && workspaceId > 0 && address) {
+                galleryScope.pendingWindowClose = { monitorName, workspaceId, address };
+                galleryScope.closeSnapshotAttempts = 0;
+                closeGuardTimer.restart();
+            }
+        }
+        Hyprland.dispatch("hl.dsp.window.close()");
+    }
+
+    function onWindowClosed(address) {
+        const pending = galleryScope.pendingWindowClose;
+        if (!pending || ServiceManager.workspace.normalizeAddress(address).toLowerCase()
+                !== pending.address.toLowerCase())
+            return;
+        closeClientsProcess.running = true;
+    }
+
+    function verifyClosedWindow(clients) {
+        const pending = galleryScope.pendingWindowClose;
+        if (!pending)
+            return;
+        if (clients.some(client => ServiceManager.workspace.normalizeAddress(client?.address).toLowerCase()
+                === pending.address.toLowerCase()) && galleryScope.closeSnapshotAttempts < 4) {
+            galleryScope.closeSnapshotAttempts += 1;
+            closeSnapshotRetryTimer.restart();
+            return;
+        }
+        galleryScope.pendingWindowClose = null;
+        closeGuardTimer.stop();
+        if (!GlobalStates.closeWindowSwitchWorkspace || GlobalStates.overviewOpen
+                || Hyprland.focusedMonitor?.name !== pending.monitorName
+                || Hyprland.focusedWorkspace?.id !== pending.workspaceId)
+            return;
+        const targetId = WorkspaceCloseSwitch.destinationAfterClose(
+            clients, ServiceManager.workspace.monitors, pending.monitorName,
+            pending.workspaceId, pending.address, galleryScope.workspaceHistoryByMonitor);
+        if (targetId > 0)
+            Hyprland.dispatch(`hl.dsp.focus({ workspace = ${targetId} })`);
+    }
+
+    Timer {
+        id: closeGuardTimer
+        interval: 2000
+        onTriggered: galleryScope.pendingWindowClose = null
+    }
+
+    Timer {
+        id: closeSnapshotRetryTimer
+        interval: 60
+        onTriggered: if (galleryScope.pendingWindowClose) closeClientsProcess.running = true
+    }
+
+    Process {
+        id: closeClientsProcess
+        command: ["hyprctl", "clients", "-j"]
+        stdout: StdioCollector {
+            id: closeClientsCollector
+            onStreamFinished: {
+                try {
+                    galleryScope.verifyClosedWindow(JSON.parse(closeClientsCollector.text));
+                } catch (error) {
+                    galleryScope.pendingWindowClose = null;
+                    closeGuardTimer.stop();
+                    console.warn("[WorkspaceGallery] Failed to check clients after close:", error);
+                }
+            }
+        }
+    }
+
+    Component.onCompleted: galleryScope.observeFocusedWorkspace()
 
     function activeMonitorName() {
         return GlobalStates.galleryActiveMonitorName
@@ -233,7 +328,7 @@ Scope {
 
     function closeSelectedWorkspaceWindow() {
         if (!GlobalStates.overviewOpen) {
-            Hyprland.dispatch("hl.dsp.window.close()");
+            galleryScope.closeActiveWindow();
             return;
         }
         const workspaceId = galleryScope.selectedWorkspaceId(galleryScope.activeMonitorName());
@@ -290,9 +385,17 @@ Scope {
 
     Connections {
         target: Hyprland
+        function onFocusedWorkspaceChanged() {
+            Qt.callLater(galleryScope.observeFocusedWorkspace);
+        }
+        function onFocusedMonitorChanged() {
+            Qt.callLater(galleryScope.observeFocusedWorkspace);
+        }
         function onRawEvent(event) {
             if (event.name === "custom")
                 galleryScope.handleSwipeEvent(event.data);
+            else if (event.name === "closewindow")
+                galleryScope.onWindowClosed(event.data);
         }
     }
 

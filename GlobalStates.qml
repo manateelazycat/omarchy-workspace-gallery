@@ -38,6 +38,8 @@ Singleton {
     // Each overlay draws only its own monitor's workspaces. Persisted to the bar
     // widget entry in shell.json, the same way overviewSortMode is.
     property bool overviewPerMonitor: true
+    // Synced from the Workspace Gallery bar widget's persisted menu setting.
+    property bool closeWindowSwitchWorkspace: false
     property int overviewFocusedWorkspaceId: -1
     property var gallerySelectedWorkspaceByMonitor: ({})
     property string galleryActiveMonitorName: ""
