@@ -23,12 +23,21 @@ Singleton {
     property bool ready: false
     property bool awaitingClients: false
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
+    property string snapshotDir: ""
+    property bool storageReady: false
+    property int captureSerial: 0
 
     Component.onCompleted: {
+        createSnapshotDir.running = true;
         if (ServiceManager.workspace.clientsLoaded)
             root.prepare();
         else
             root.awaitingClients = true;
+    }
+
+    Component.onDestruction: {
+        if (root.snapshotDir.length > 0)
+            Quickshell.execDetached(["rm", "-rf", "--", root.snapshotDir]);
     }
 
     function prepare() {
@@ -84,21 +93,29 @@ Singleton {
         if (root.requested[key])
             return;
         root.requested = Object.assign({}, root.requested, { [key]: true });
-        const path = `${root.runtimeDir}/omarchy-workspace-gallery-${root.generation}-${key}.png`;
-        root.queue.push({ key, id, path, generation: root.generation });
-        root.files.push({ path, generation: root.generation });
+        root.queue.push({ key, id, generation: root.generation });
         root.startNext();
     }
 
     function startNext() {
-        if (root.current || captureProcess.running)
+        if (!root.storageReady || root.current || captureProcess.running)
             return;
+        if (root.snapshotDir.length === 0) {
+            root.queue = [];
+            root.publish();
+            return;
+        }
         if (root.queue.length === 0) {
             root.publish();
             return;
         }
         root.current = root.queue.shift();
-        captureProcess.command = ["grim", "-t", "png", "-l", "1", "-T",
+        root.captureSerial += 1;
+        root.current.path = `${root.snapshotDir}/${root.generation}-${root.captureSerial}.png`;
+        root.files.push({ path: root.current.path, generation: root.current.generation });
+        // Pass arguments separately: window IDs and paths never become shell code.
+        captureProcess.command = ["sh", "-c", 'umask 077; exec grim "$@"',
+            "workspace-gallery-capture", "-t", "png", "-l", "1", "-T",
             root.current.id, root.current.path];
         captureProcess.running = true;
     }
@@ -111,6 +128,22 @@ Singleton {
         root.stagedUrls = ({});
         root.ready = true;
         cleanupTimer.restart();
+    }
+
+    // mktemp creates an unpredictable, exclusive 0700 directory even in /tmp.
+    // Each plugin instance gets its own directory; never reuse a public path.
+    Process {
+        id: createSnapshotDir
+        command: ["mktemp", "-d", "--", `${root.runtimeDir}/omarchy-workspace-gallery.XXXXXXXXXX`]
+        stdout: StdioCollector {
+            onStreamFinished: {
+                root.snapshotDir = text.trim();
+                root.storageReady = true;
+                if (root.snapshotDir.length === 0)
+                    console.warn("[WorkspaceGallery] Could not create private screenshot storage");
+                root.startNext();
+            }
+        }
     }
 
     Process {
