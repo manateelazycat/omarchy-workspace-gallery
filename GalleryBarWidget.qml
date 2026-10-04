@@ -35,11 +35,15 @@ BarWidget {
     Component.onCompleted: root.syncSetting()
     onSettingsChanged: root.syncSetting()
 
-    WidgetButton {
+    BarIconButton {
         id: button
         anchors.fill: parent
         bar: root.bar
-        text: "▦"
+        iconComponent: Component {
+            GalleryIcon {
+                color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+            }
+        }
         active: root.menuOpen
         tooltipText: "工作区总览 · 右键设置关闭窗口行为"
         onPressed: function(buttonCode) {
