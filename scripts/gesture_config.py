@@ -19,7 +19,21 @@ hl.bind("SUPER + A", hl.dsp.global("quickshell:workspaceGalleryToggle"), {{
   description = "Toggle Workspace Gallery",
 }})
 hl.unbind("SUPER + W")
-hl.bind("SUPER + W", hl.dsp.global("quickshell:workspaceGalleryCloseWindow"), {{
+-- Keep the fallback inline so it still works after the plugin is removed.
+-- Do not use omarchy-shell -q: it reports success when the target is missing.
+hl.bind("SUPER + W", function()
+  local active = hl.get_window("active")
+  local fallback = active and string.format(
+    'hl.dsp.window.close({{ window = "address:%s" }})', active.address
+  ) or "hl.dsp.no_op()"
+  -- IPC only prepares a dispatcher. A timed-out request must never close
+  -- another window when Quickshell eventually processes it.
+  local command = string.format([[
+gallery_close_dispatch=$(omarchy-shell workspace-gallery prepareCloseWindow '%s' 2>/dev/null) || gallery_close_dispatch='%s'
+hyprctl dispatch "$gallery_close_dispatch"
+]], active and active.address or "", fallback)
+  hl.dispatch(hl.dsp.exec_cmd(command))
+end, {{
   description = "Close window",
 }})
 hl.gesture({{

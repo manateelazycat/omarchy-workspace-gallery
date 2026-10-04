@@ -37,25 +37,56 @@ Scope {
             galleryScope.workspaceHistoryByMonitor, monitor?.name ?? "", id);
     }
 
-    function closeActiveWindow() {
+    function prepareActiveWindowClose(activeAddress = null) {
         galleryScope.pendingWindowClose = null;
         closeGuardTimer.stop();
         closeSnapshotRetryTimer.stop();
+        const monitorName = Hyprland.focusedMonitor?.name ?? "";
+        const workspaceId = Hyprland.focusedWorkspace?.id ?? -1;
+        const nativeAddress = activeAddress === null
+            ? (Hyprland.activeToplevel?.HyprlandToplevel?.address || Hyprland.activeToplevel?.address)
+            : activeAddress;
+        const cachedWindow = ServiceManager.workspace.activeWindow;
+        const address = ServiceManager.workspace.normalizeAddress(nativeAddress
+            || (activeAddress === null && cachedWindow?.workspace?.id === workspaceId ? cachedWindow.address : ""));
         if (GlobalStates.closeWindowSwitchWorkspace) {
-            const monitorName = Hyprland.focusedMonitor?.name ?? "";
-            const workspaceId = Hyprland.focusedWorkspace?.id ?? -1;
-            const nativeAddress = Hyprland.activeToplevel?.HyprlandToplevel?.address
-                || Hyprland.activeToplevel?.address;
-            const cachedWindow = ServiceManager.workspace.activeWindow;
-            const address = ServiceManager.workspace.normalizeAddress(nativeAddress
-                || (cachedWindow?.workspace?.id === workspaceId ? cachedWindow.address : ""));
-            if (monitorName && workspaceId > 0 && address) {
+            const client = HyprlandData.clientByAddress(address);
+            if (monitorName && workspaceId > 0 && address
+                    && (!client || client.workspace?.id === workspaceId)) {
                 galleryScope.pendingWindowClose = { monitorName, workspaceId, address };
                 galleryScope.closeSnapshotAttempts = 0;
                 closeGuardTimer.restart();
             }
         }
-        Hyprland.dispatch("hl.dsp.window.close()");
+        if (address)
+            return `hl.dsp.window.close({ window = ${WorkspaceNavigation.luaQuoted(`address:${address}`)} })`;
+        return activeAddress === null ? "hl.dsp.window.close()" : "hl.dsp.no_op()";
+    }
+
+    function closeActiveWindow() {
+        Hyprland.dispatch(galleryScope.prepareActiveWindowClose());
+    }
+
+    function prepareWindowClose(activeAddress) {
+        if (!GlobalStates.overviewOpen)
+            return galleryScope.prepareActiveWindowClose(activeAddress);
+        const workspaceId = Number(galleryScope.selectedWorkspaceId(galleryScope.activeMonitorName()));
+        if (!Number.isInteger(workspaceId) || workspaceId < 1)
+            return "hl.dsp.no_op()";
+        // Select from the compositor's current data, as the existing close
+        // path does. The IPC reply itself performs no window close.
+        return `function()
+            local recent = nil
+            for _, window in ipairs(hl.get_windows({ workspace = "${workspaceId}" })) do
+                if window.mapped and not window.hidden
+                    and (not recent or window.focus_history_id < recent.focus_history_id) then
+                    recent = window
+                end
+            end
+            if recent then
+                hl.dispatch(hl.dsp.window.close({ window = "address:" .. recent.address }))
+            end
+        end`;
     }
 
     function onWindowClosed(address) {
@@ -479,6 +510,14 @@ Scope {
                     }
                 }
             }
+        }
+    }
+
+    IpcHandler {
+        target: "workspace-gallery"
+
+        function prepareCloseWindow(activeAddress: string): string {
+            return galleryScope.prepareWindowClose(activeAddress);
         }
     }
 

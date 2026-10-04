@@ -51,9 +51,22 @@ omarchy plugin add https://github.com/manateelazycat/omarchy-workspace-gallery.g
 ~/.config/omarchy/plugins/io.github.manateelazycat.workspace-gallery/scripts/gestures install
 ```
 
-The gesture installer adds the `Super+A` shortcut and gestures in a clearly
-marked block in `~/.config/hypr/input.lua`, creates a timestamped backup,
-reloads Hyprland, and validates the configuration.
+The gesture installer adds the `Super+A` and `Super+W` shortcuts and gestures
+in a clearly marked block in `~/.config/hypr/input.lua`, creates a timestamped
+backup, reloads Hyprland, and validates the configuration.
+
+`Super+W` uses the gallery's close behavior while the plugin is running. If
+the plugin is disabled, removed, or Quickshell is unavailable, it falls back
+to Hyprland's native close action for the window focused when the key was
+pressed, even if the managed block is still present.
+
+After updating an existing installation, rerun the installer to replace the
+old shortcut binding, then restart the shell to load the IPC handler:
+
+```bash
+~/.config/omarchy/plugins/io.github.manateelazycat.workspace-gallery/scripts/gestures install
+omarchy restart shell
+```
 
 ## Remove
 
@@ -64,9 +77,17 @@ Remove the managed shortcut and gesture block before removing the plugin:
 omarchy plugin remove io.github.manateelazycat.workspace-gallery --yes
 ```
 
+`omarchy plugin remove` does not clean up the managed block. If the plugin
+has already been removed, run `./scripts/gestures uninstall` from a checkout
+of this repository to remove the leftover shortcuts and gestures. This also
+restores native `Super+W` for installations that still have the old binding.
+
 ## Development
 
+Tests require Node.js, Python 3, and a Lua interpreter:
+
 ```bash
+node --test
 omarchy plugin validate .
 qmllint -I "${OMARCHY_PATH:-/usr/share/omarchy}/shell" \
   Gallery.qml GalleryWidget.qml GalleryWindow.qml OverviewWindow.qml

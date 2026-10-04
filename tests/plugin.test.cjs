@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+const { spawnSync } = require("node:child_process");
 const test = require("node:test");
 
 const root = path.resolve(__dirname, "..");
@@ -334,12 +335,101 @@ test("Super+W closes the latest window from the workspace selected in the galler
   const navigation = read("WorkspaceNavigation.qml");
 
   assert.match(config, /hl\.unbind\("SUPER \+ W"\)/);
-  assert.match(config, /hl\.bind\("SUPER \+ W", hl\.dsp\.global\("quickshell:workspaceGalleryCloseWindow"\)/);
+  assert.match(config, /hl\.bind\("SUPER \+ W", function\(\)/);
+  assert.match(gallery, /IpcHandler\s*\{\s*target: "workspace-gallery"\s*function prepareCloseWindow\(activeAddress: string\): string\s*\{\s*return galleryScope\.prepareWindowClose\(activeAddress\)/);
   assert.match(gallery, /name: "workspaceGalleryCloseWindow"[\s\S]*galleryScope\.closeSelectedWorkspaceWindow\(\)/);
   assert.match(gallery, /galleryScope\.selectedWorkspaceId\(galleryScope\.activeMonitorName\(\)\)[\s\S]*WorkspaceNavigation\.closeMostRecentWindowInWorkspace\(workspaceId\)/);
   assert.match(gallery, /if \(!GlobalStates\.overviewOpen\)[\s\S]*galleryScope\.closeActiveWindow\(\)/);
-  assert.match(gallery, /function closeActiveWindow\(\)[\s\S]*hl\.dsp\.window\.close\(\)/);
+  assert.match(gallery, /function closeActiveWindow\(\)[\s\S]*Hyprland\.dispatch\(galleryScope\.prepareActiveWindowClose\(\)\)/);
   assert.match(navigation, /WorkspaceWindowSelection\.mostRecentClientForWorkspace/);
+});
+
+test("gallery close routes to the selected workspace or normal active-window close", () => {
+  const calls = [];
+  const GlobalStates = { overviewOpen: false };
+  const close = qmlFunction(read("Gallery.qml"), "closeSelectedWorkspaceWindow", "updateLiveWindowDrag", {
+    GlobalStates,
+    galleryScope: {
+      closeActiveWindow: () => calls.push("active"),
+      activeMonitorName: () => "DP-2",
+      selectedWorkspaceId: monitor => {
+        assert.equal(monitor, "DP-2");
+        return 7;
+      }
+    },
+    WorkspaceNavigation: { closeMostRecentWindowInWorkspace: workspace => calls.push(workspace) }
+  });
+  close();
+  assert.deepEqual(calls, ["active"]);
+  GlobalStates.overviewOpen = true;
+  close();
+  assert.deepEqual(calls, ["active", 7]);
+});
+
+test("preparing active-window close captures the target without closing it", () => {
+  const galleryScope = {};
+  const GlobalStates = { closeWindowSwitchWorkspace: true };
+  const client = { workspace: { id: 2 } };
+  const prepare = qmlFunction(read("Gallery.qml"), "prepareActiveWindowClose", "closeActiveWindow", {
+    galleryScope, GlobalStates,
+    Hyprland: {
+      focusedMonitor: { name: "DP-1" }, focusedWorkspace: { id: 2 },
+      activeToplevel: { address: "0xdef" },
+      dispatch: () => assert.fail("preparing must not close a window")
+    },
+    ServiceManager: { workspace: {
+      activeWindow: { address: "0xdef", workspace: { id: 2 } },
+      normalizeAddress: address => address
+    } },
+    HyprlandData: { clientByAddress: () => client },
+    WorkspaceNavigation: { luaQuoted: JSON.stringify },
+    closeGuardTimer: { stop() {}, restart() {} },
+    closeSnapshotRetryTimer: { stop() {} }
+  });
+  assert.equal(prepare("0xabc"), 'hl.dsp.window.close({ window = "address:0xabc" })');
+  assert.deepEqual(galleryScope.pendingWindowClose, { monitorName: "DP-1", workspaceId: 2, address: "0xabc" });
+  assert.equal(prepare(""), "hl.dsp.no_op()");
+  assert.equal(galleryScope.pendingWindowClose, null);
+  assert.equal(prepare(), 'hl.dsp.window.close({ window = "address:0xdef" })');
+  client.workspace.id = 3;
+  assert.equal(prepare("0xabc"), 'hl.dsp.window.close({ window = "address:0xabc" })');
+  assert.equal(galleryScope.pendingWindowClose, null, "changing focus must not arm a workspace switch for another workspace");
+});
+
+test("prepared gallery dispatcher closes the most recent visible window using fresh compositor data", () => {
+  const GlobalStates = { overviewOpen: true };
+  const prepare = qmlFunction(read("Gallery.qml"), "prepareWindowClose", "onWindowClosed", {
+    GlobalStates,
+    galleryScope: {
+      activeMonitorName: () => "DP-2",
+      selectedWorkspaceId: monitor => {
+        assert.equal(monitor, "DP-2");
+        return 7;
+      },
+      prepareActiveWindowClose: address => `active:${address}`
+    }
+  });
+  const dispatcher = prepare("0xabc");
+  for (const windows of [
+    '{ { address="0xold", mapped=true, hidden=false, focus_history_id=8 }, { address="0xnew", mapped=true, hidden=false, focus_history_id=1 }, { address="0xhidden", mapped=true, hidden=true, focus_history_id=0 }, { address="0xunmapped", mapped=false, hidden=false, focus_history_id=0 } }',
+    '{}'
+  ]) {
+    const lua = `
+hl = {
+  get_windows = function(filters) assert(filters.workspace == "7"); return ${windows} end,
+  dispatch = function(target) io.write(target) end,
+  dsp = { window = { close = function(options) return options.window end } },
+}
+local close = ${dispatcher}
+close()
+`;
+    const result = spawnSync("lua", ["-"], { input: lua, encoding: "utf8", timeout: 10000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, windows === '{}' ? "" : "address:0xnew");
+  }
+  GlobalStates.overviewOpen = false;
+  assert.equal(prepare("0xabc"), "active:0xabc");
 });
 
 test("closing the last window returns to an occupied workspace on the same monitor", () => {

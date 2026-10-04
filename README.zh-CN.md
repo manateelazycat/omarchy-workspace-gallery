@@ -40,7 +40,16 @@ omarchy plugin add https://github.com/manateelazycat/omarchy-workspace-gallery.g
 ~/.config/omarchy/plugins/io.github.manateelazycat.workspace-gallery/scripts/gestures install
 ```
 
-手势安装脚本会将 `Super+A` 快捷键和手势添加到 `~/.config/hypr/input.lua` 中一个明确标记的配置块，创建带时间戳的备份，重新加载 Hyprland，并验证配置。
+手势安装脚本会将 `Super+A`、`Super+W` 快捷键和手势添加到 `~/.config/hypr/input.lua` 中一个明确标记的配置块，创建带时间戳的备份，重新加载 Hyprland，并验证配置。
+
+插件运行时，`Super+W` 保留总览的关窗行为。插件停用、移除或 Quickshell 不可用时，即使配置块仍然存在，也会回退到 Hyprland 原生关窗动作，关闭按键触发时获得焦点的窗口。
+
+已有安装更新后，需要重新运行安装脚本以替换旧快捷键绑定，再重启 shell 加载 IPC 处理方法：
+
+```bash
+~/.config/omarchy/plugins/io.github.manateelazycat.workspace-gallery/scripts/gestures install
+omarchy restart shell
+```
 
 将按钮放在任务栏右侧。若已用旧版本安装，先将纯面板条目移出插件列表，再将同一插件放入任务栏；按钮条目也会继续加载总览面板：
 
@@ -58,9 +67,14 @@ omarchy bar put io.github.manateelazycat.workspace-gallery --section right
 omarchy plugin remove io.github.manateelazycat.workspace-gallery --yes
 ```
 
+`omarchy plugin remove` 不会清理此配置块。如果插件已经移除，可在本仓库的检出目录运行 `./scripts/gestures uninstall`，清理残留的快捷键和手势；仍使用旧绑定的安装也会恢复原生 `Super+W`。
+
 ## 开发
 
+测试需要 Node.js、Python 3 和 Lua 解释器：
+
 ```bash
+node --test
 omarchy plugin validate .
 qmllint -I "${OMARCHY_PATH:-/usr/share/omarchy}/shell" \
   Gallery.qml GalleryWidget.qml GalleryWindow.qml OverviewWindow.qml
