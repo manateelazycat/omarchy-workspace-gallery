@@ -23,7 +23,10 @@ OverviewWidget 1.0 OverviewWidget.qml
 OverviewWindow 1.0 OverviewWindow.qml
 Gallery 1.0 Gallery.qml
 GalleryBarWidget 1.0 GalleryBarWidget.qml
+GalleryIcon 1.0 GalleryIcon.qml
 GalleryWidget 1.0 GalleryWidget.qml
 GalleryWindow 1.0 GalleryWindow.qml
+GalleryWorkspacePage 1.0 GalleryWorkspacePage.qml
+NerdIcon 1.0 NerdIcon.qml
 StyledText 1.0 StyledText.qml
 StyledImage 1.0 StyledImage.qml
