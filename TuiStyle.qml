@@ -8,6 +8,7 @@ QtObject {
     readonly property color dim: Commons.Color.muted
     readonly property color line: Commons.Color.muted
     readonly property color accent: Commons.Color.accent
+    readonly property color urgent: Commons.Color.urgent
     readonly property color selection: Qt.rgba(Commons.Color.accent.r, Commons.Color.accent.g, Commons.Color.accent.b, 0.22)
     readonly property color inactiveBorder: Qt.rgba(Commons.Color.foreground.r, Commons.Color.foreground.g, Commons.Color.foreground.b, 0.32)
     readonly property color controlActiveBorder: Commons.Color.accent

@@ -29,6 +29,7 @@ Scope {
     property var workspaceHistoryByMonitor: ({})
     property var pendingWindowClose: null
     property int closeSnapshotAttempts: 0
+    property var forceCloseTarget: null
 
     function observeFocusedWorkspace() {
         const monitor = Hyprland.focusedMonitor;
@@ -68,6 +69,8 @@ Scope {
     }
 
     function prepareWindowClose(activeAddress) {
+        if (galleryScope.forceCloseTarget)
+            return "hl.dsp.no_op()";
         if (!GlobalStates.overviewOpen)
             return galleryScope.prepareActiveWindowClose(activeAddress);
         const workspaceId = Number(galleryScope.selectedWorkspaceId(galleryScope.activeMonitorName()));
@@ -90,9 +93,11 @@ Scope {
     }
 
     function onWindowClosed(address) {
+        const closedAddress = ServiceManager.workspace.normalizeAddress(address).toLowerCase();
+        if (closedAddress === galleryScope.forceCloseTarget?.address)
+            galleryScope.forceCloseTarget = null;
         const pending = galleryScope.pendingWindowClose;
-        if (!pending || ServiceManager.workspace.normalizeAddress(address).toLowerCase()
-                !== pending.address.toLowerCase())
+        if (!pending || closedAddress !== pending.address.toLowerCase())
             return;
         closeClientsProcess.running = true;
     }
@@ -173,9 +178,38 @@ Scope {
             GlobalStates.galleryActiveMonitorName = monitorName;
     }
 
+    function requestForceClose(windowData, screen) {
+        if (!GlobalStates.overviewOpen || galleryScope.closing || galleryScope.forceCloseTarget)
+            return;
+        const address = ServiceManager.workspace.normalizeAddress(windowData?.address).toLowerCase();
+        const stableId = String(windowData?.stableId ?? "");
+        if (!/^0x[0-9a-f]+$/.test(address) || !/^[0-9a-f]+$/i.test(stableId))
+            return;
+        galleryScope.forceCloseTarget = {
+            address, stableId, screen,
+            title: windowData.title || windowData.class || address
+        };
+    }
+
+    function confirmForceClose() {
+        const target = galleryScope.forceCloseTarget;
+        galleryScope.forceCloseTarget = null;
+        if (!target)
+            return;
+        // Resolve the target in Hyprland so a recycled address cannot kill a new window.
+        Hyprland.dispatch(`function()
+            local selector = "address:${target.address}"
+            local window = hl.get_window(selector)
+            if window and window.mapped and window.stable_id == 0x${target.stableId} then
+                hl.dispatch(hl.dsp.window.kill({ window = selector }))
+            end
+        end`);
+    }
+
     function open(payload) {
         closeAnimation.stop();
         galleryScope.closing = false;
+        galleryScope.forceCloseTarget = null;
         galleryScope.commitSelectionAfterClose = false;
         galleryScope.closingWorkspaceId = -1;
         galleryScope.closingMonitorName = "";
@@ -211,6 +245,7 @@ Scope {
     function close(commitSelection = false, workspaceId = -1, windowData = null, monitorName = "") {
         if (!GlobalStates.overviewOpen || galleryScope.closing)
             return;
+        galleryScope.forceCloseTarget = null;
         GlobalStates.gallerySwipeFinished(true, 0);
         galleryScope.commitSelectionAfterClose = commitSelection;
         galleryScope.closingMonitorName = monitorName || galleryScope.activeMonitorName();
@@ -239,6 +274,8 @@ Scope {
     }
 
     function selectRelative(delta) {
+        if (galleryScope.forceCloseTarget)
+            return;
         if (!GlobalStates.overviewOpen) {
             Hyprland.dispatch(`hl.dsp.focus({ workspace = "e${delta > 0 ? "+1" : "-1"}" })`);
             return;
@@ -247,6 +284,8 @@ Scope {
     }
 
     function handleSwipeEvent(data) {
+        if (galleryScope.forceCloseTarget)
+            return;
         const parts = String(data ?? "").split(",");
         if (parts.length < 2)
             return;
@@ -358,6 +397,8 @@ Scope {
     }
 
     function closeSelectedWorkspaceWindow() {
+        if (galleryScope.forceCloseTarget)
+            return;
         if (!GlobalStates.overviewOpen) {
             galleryScope.closeActiveWindow();
             return;
@@ -415,6 +456,15 @@ Scope {
     }
 
     Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            const target = galleryScope.forceCloseTarget;
+            if (target && !Quickshell.screens.includes(target.screen))
+                galleryScope.forceCloseTarget = null;
+        }
+    }
+
+    Connections {
         target: Hyprland
         function onFocusedWorkspaceChanged() {
             Qt.callLater(galleryScope.observeFocusedWorkspace);
@@ -465,6 +515,7 @@ Scope {
                     // Build the four monitor views while the panel is hidden.
                     // A ready snapshot set can then appear in one frame.
                     active: true
+                    enabled: !galleryScope.forceCloseTarget
                     asynchronous: true
                     opacity: galleryScope.revealProgress
                     y: (1 - galleryScope.revealProgress) * 28
@@ -479,9 +530,21 @@ Scope {
                         closing: galleryScope.closing
                         onMonitorActivated: monitorName => galleryScope.activateMonitor(monitorName)
                         onWorkspaceSelected: monitorName => galleryScope.selectionTouched = true
+                        onForceCloseRequested: windowData =>
+                            galleryScope.requestForceClose(windowData, panelLoader.modelData)
                         onCloseRequested: (commitSelection, workspaceId, windowData, monitorName) =>
                             galleryScope.close(commitSelection, workspaceId, windowData, monitorName)
                     }
+                }
+
+                GalleryForceCloseDialog {
+                    id: forceCloseDialog
+                    anchors.fill: galleryLoader.parent
+                    visible: !!galleryScope.forceCloseTarget
+                        && galleryScope.forceCloseTarget.screen === panelLoader.modelData
+                    windowTitle: galleryScope.forceCloseTarget?.title ?? ""
+                    onCanceled: galleryScope.forceCloseTarget = null
+                    onConfirmed: galleryScope.confirmForceClose()
                 }
 
                 Item {
@@ -489,6 +552,14 @@ Scope {
                     focus: true
 
                     Keys.onPressed: event => {
+                        if (galleryScope.forceCloseTarget) {
+                            if (event.key === Qt.Key_Escape)
+                                galleryScope.forceCloseTarget = null;
+                            else if (forceCloseDialog.visible)
+                                forceCloseDialog.handleKey(event);
+                            event.accepted = true;
+                            return;
+                        }
                         galleryScope.activateMonitor(panelWindow.screen?.name ?? "");
                         if (event.key === Qt.Key_Escape) {
                             galleryScope.activateSelection();

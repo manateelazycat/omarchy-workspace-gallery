@@ -146,7 +146,7 @@ test("each gallery monitor keeps its own selected workspace and keyboard target"
   assert.match(widget, /function animateToWorkspace\(workspaceId\)[\s\S]*root\.monitorActivated\(root\.monitor\?\.name \?\? ""\)/);
   assert.match(widget, /ownsGesture:[\s\S]*GlobalStates\.galleryActiveMonitorName/);
   assert.match(gallery, /WlrLayershell\.keyboardFocus: GlobalStates\.overviewOpen && !galleryScope\.closing[\s\S]*WlrKeyboardFocus\.OnDemand/);
-  assert.match(gallery, /Keys\.onPressed: event => \{\s+galleryScope\.activateMonitor\(panelWindow\.screen\?\.name \?\? ""\)/);
+  assert.match(gallery, /Keys\.onPressed: event => \{[\s\S]*galleryScope\.activateMonitor\(panelWindow\.screen\?\.name \?\? ""\)/);
   assert.match(widget, /root\.selectWorkspace\(fallback\.id, false\)/);
   assert.match(navigation, /function commitWorkspaceForMonitor\(monitorName, workspaceId\)[\s\S]*galleryWorkspaceEntriesForMonitor\(name\)/);
   assert.doesNotMatch(widget, /GlobalStates\.overviewFocusedWorkspaceId/);
@@ -432,6 +432,57 @@ close()
   assert.equal(prepare("0xabc"), "active:0xabc");
 });
 
+test("force close dispatches only after confirmation and checks the original window identity", () => {
+  const source = read("Gallery.qml");
+  const galleryScope = { closing: false, forceCloseTarget: null };
+  const GlobalStates = { overviewOpen: true };
+  const commands = [];
+  const request = qmlFunction(source, "requestForceClose", "confirmForceClose", {
+    galleryScope, GlobalStates,
+    ServiceManager: { workspace: { normalizeAddress: address => address } }
+  });
+  const confirm = qmlFunction(source, "confirmForceClose", "open", {
+    galleryScope, Hyprland: { dispatch: command => commands.push(command) }
+  });
+
+  request({ address: "0xabc", stableId: "invalid", title: "Invalid" }, {});
+  confirm();
+  request({ address: "0xabc", stableId: "18000006", title: "Original" }, {});
+  request({ address: "0xdef", stableId: "18000007", title: "Other" }, {});
+  assert.equal(galleryScope.forceCloseTarget.title, "Original");
+  assert.deepEqual(commands, []);
+  galleryScope.forceCloseTarget = null;
+  confirm();
+  assert.deepEqual(commands, []);
+
+  request({ address: "0xABC", stableId: "18000006", title: "Original" }, {});
+  confirm();
+  confirm();
+  assert.equal(commands.length, 1);
+  assert.equal(galleryScope.forceCloseTarget, null);
+
+  for (const [window, expected] of [
+    ['{ mapped = true, stable_id = 0x18000006 }', "address:0xabc"],
+    ['{ mapped = true, stable_id = 0x18000007 }', ""],
+    ['{ mapped = false, stable_id = 0x18000006 }', ""],
+    ['nil', ""]
+  ]) {
+    const lua = `
+hl = {
+  get_window = function(selector) assert(selector == "address:0xabc"); return ${window} end,
+  dsp = { window = { kill = function(options) return options.window end } },
+  dispatch = function(target) io.write(target) end,
+}
+local confirm = ${commands[0]}
+confirm()
+`;
+    const result = spawnSync("lua", ["-"], { input: lua, encoding: "utf8", timeout: 10000 });
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout, expected);
+  }
+});
+
 test("closing the last window returns to an occupied workspace on the same monitor", () => {
   const { rememberWorkspace, destinationAfterClose } = require(path.join(root, "WorkspaceCloseSwitch.js"));
   let history = {};
@@ -565,12 +616,12 @@ test("empty workspace cards leave left-to-right at half-duration intervals", () 
   assert.equal(animation.duration, 1240);
 });
 
-test("top workspace taps coexist with window dragging", () => {
+test("top workspace background clicks sit below the window drag and close controls", () => {
   const gallery = read("GalleryWidget.qml");
+  assert.match(gallery, /MouseArea \{\s*anchors\.fill: parent\s*z: 10[\s\S]*onClicked: root\.animateToWorkspace\(topCard\.modelData\.id\)[\s\S]*id: topWindowLayer/);
   assert.match(gallery, /id: topWindowLayer[\s\S]*z: 20[\s\S]*Repeater/);
-  assert.match(gallery, /id: topWindowLayer[\s\S]*GalleryWindow[\s\S]*TapHandler \{/);
-  assert.match(gallery, /gesturePolicy: TapHandler\.DragThreshold/);
-  const topWindowLayer = gallery.slice(gallery.indexOf("id: topWindowLayer"), gallery.indexOf("TapHandler {", gallery.indexOf("id: topWindowLayer")));
+  const topWindowLayer = gallery.slice(gallery.indexOf("id: topWindowLayer"), gallery.indexOf("id: topDrop"));
+  assert.match(topWindowLayer, /GalleryWindow \{/);
   assert.doesNotMatch(topWindowLayer, /overviewCompactionSyncing|Behavior on opacity/);
 });
 
@@ -593,7 +644,7 @@ test("clicking a top workspace animates the large preview in its direction", () 
   assert.match(source, /root\.settleEasingType = Easing\.InOutCubic/);
   assert.match(source, /inClickTravelRange[\s\S]*Math\.min\(anchorIndex, root\.settlementIndex\)/);
   assert.doesNotMatch(source, /clickedWorkspaceStepTimer/);
-  assert.match(source, /onTapped: root\.animateToWorkspace\(topCard\.modelData\.id\)/);
+  assert.match(source, /onClicked: root\.animateToWorkspace\(topCard\.modelData\.id\)/);
   assert.match(source, /onActivated: root\.animateToWorkspace\(topCard\.modelData\.id\)/);
 });
 

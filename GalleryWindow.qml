@@ -120,9 +120,7 @@ OverviewWindow {
     scaleX: root.fittedScale
     scaleY: root.fittedScale
     scale: root.fittedScale
-    opacity: root.Drag.active && root.closeOnActivate
-        ? 0
-        : (root.anyPreviewContent || root.showingFreeze || root.captureAttempt >= 8 ? 1 : 0)
+    opacity: root.Drag.active && root.closeOnActivate ? 0 : 1
     topLeftRadius: 5
     topRightRadius: 5
     bottomLeftRadius: 5
@@ -161,6 +159,25 @@ OverviewWindow {
 
     Drag.hotSpot.x: width / 2
     Drag.hotSpot.y: height / 2
+
+    Rectangle {
+        anchors.fill: parent
+        visible: !root.anyPreviewContent && !root.showingFreeze
+        radius: 5
+        color: TuiStyle.panel
+        border.color: TuiStyle.inactiveBorder
+
+        Text {
+            anchors.centerIn: parent
+            width: Math.max(0, parent.width - 12)
+            text: root.windowData?.title || root.windowData?.class || ""
+            textFormat: Text.PlainText
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            color: TuiStyle.fg
+            font.pixelSize: root.closeOnActivate ? 14 : 10
+        }
+    }
 
     MouseArea {
         id: dragArea
@@ -258,6 +275,40 @@ OverviewWindow {
                 root.activated(root.windowData);
                 event.accepted = true;
             }
+        }
+    }
+
+    Rectangle {
+        id: forceCloseButton
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 3
+        width: Math.max(0, Math.min(root.width - 6, root.height - 6, root.closeOnActivate ? 26 : 16))
+        height: width
+        visible: width >= 10 && !!root.liveWindowData?.stableId && !CrossMonitorDrag.active
+        enabled: root.interactionEnabled
+        radius: width / 2
+        color: closeArea.containsMouse ? TuiStyle.urgent : TuiStyle.panel
+        border.color: closeArea.containsMouse ? TuiStyle.urgent : TuiStyle.inactiveBorder
+
+        Accessible.role: Accessible.Button
+        Accessible.name: qsTr("Force close window")
+        Accessible.onPressAction: if (visible && enabled) root.galleryRoot.forceCloseRequested(root.liveWindowData)
+
+        Text {
+            anchors.centerIn: parent
+            text: "×"
+            color: closeArea.containsMouse ? TuiStyle.bg : TuiStyle.fg
+            font.pixelSize: forceCloseButton.width * 0.8
+        }
+
+        MouseArea {
+            id: closeArea
+            anchors.fill: parent
+            hoverEnabled: true
+            preventStealing: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.galleryRoot.forceCloseRequested(root.liveWindowData)
         }
     }
 }

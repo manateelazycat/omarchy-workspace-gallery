@@ -23,6 +23,7 @@ OverviewWidget 1.0 OverviewWidget.qml
 OverviewWindow 1.0 OverviewWindow.qml
 Gallery 1.0 Gallery.qml
 GalleryBarWidget 1.0 GalleryBarWidget.qml
+GalleryForceCloseDialog 1.0 GalleryForceCloseDialog.qml
 GalleryWidget 1.0 GalleryWidget.qml
 GalleryWindow 1.0 GalleryWindow.qml
 StyledText 1.0 StyledText.qml

@@ -12,6 +12,7 @@ Item {
     id: root
 
     signal closeRequested(bool commitSelection, int workspaceId, var windowData, string monitorName)
+    signal forceCloseRequested(var windowData)
     signal monitorActivated(string monitorName)
     signal workspaceSelected(string monitorName)
 
@@ -82,7 +83,7 @@ Item {
     property int settleEasingType: Easing.OutCubic
     property var compactionHandoffGrab: null
     property url compactionHandoffUrl: ""
-    readonly property bool workspaceInteractionEnabled: !root.swipeActive
+    readonly property bool workspaceInteractionEnabled: !root.closing && !root.swipeActive
         && !root.swipeSettling
         && !GlobalStates.overviewCompactionAnimating
         && !GlobalStates.overviewCompactionSyncing
@@ -532,13 +533,17 @@ Item {
                     : "transparent"
             }
 
+            MouseArea {
+                anchors.fill: parent
+                z: 10
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.animateToWorkspace(topCard.modelData.id)
+            }
+
             Item {
                 id: topWindowLayer
                 anchors.fill: parent
-                // Preserve the old direct-delegate stacking order. Without an
-                // explicit z the animation wrapper sits below the card-wide
-                // MouseArea, so that area consumes presses before windows can
-                // start their drag.
+                // Window controls and drag handles receive clicks before the card background.
                 z: 20
 
                 Repeater {
@@ -558,12 +563,6 @@ Item {
                         onActivated: root.animateToWorkspace(topCard.modelData.id)
                     }
                 }
-            }
-
-            TapHandler {
-                acceptedButtons: Qt.LeftButton
-                gesturePolicy: TapHandler.DragThreshold
-                onTapped: root.animateToWorkspace(topCard.modelData.id)
             }
 
             DropArea {
